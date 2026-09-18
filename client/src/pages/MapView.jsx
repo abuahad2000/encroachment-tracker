@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, GeoJSON, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, GeoJSON as GeoJSONLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -11,6 +11,7 @@ export default function MapView() {
     fetch('/api/layers')
       .then(r => r.json())
       .then(d => {
+        console.log('✓ Loaded', d.features?.length, 'features')
         setGeoData(d)
         setLoading(false)
       })
@@ -25,24 +26,20 @@ export default function MapView() {
     iconSize: [24, 24],
   })
 
-  if (loading) return <div className="text-center py-8">جاري تحميل الخريطة...</div>
-
   const onEachFeature = (feature, layer) => {
-    const popupContent = `<div style="direction: rtl; text-align: right;">
-      <strong>${feature.properties.name || 'بدون اسم'}</strong>
-      <br/>${feature.properties.description || ''}
-    </div>`
-    layer.bindPopup(popupContent)
+    const name = feature.properties?.name || 'Unknown'
+    layer.bindPopup(`<div style="direction:rtl"><strong>${name}</strong></div>`)
   }
 
-  const getFeatureStyle = (feature) => {
-    if (!feature.geometry || feature.geometry.type === 'Point') return {}
+  const getStyle = (feature) => {
+    if (!feature?.geometry) return {}
+    if (feature.geometry.type === 'Point') return {}
 
     const colors = ['#0066cc', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24']
-    const color = feature.properties?.color || colors[Math.floor(Math.random() * colors.length)]
+    const color = colors[Math.floor(Math.random() * colors.length)]
 
     return {
-      color: color,
+      color,
       weight: 2,
       opacity: 0.7,
       fillOpacity: 0.2,
@@ -50,50 +47,69 @@ export default function MapView() {
     }
   }
 
+  if (loading) {
+    return <div className="text-center py-12">جاري تحميل الخريطة...</div>
+  }
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">الخريطة التفاعلية</h1>
 
-      <div style={{ height: '600px', borderRadius: '12px', overflow: 'hidden' }} className="shadow-lg">
-        {geoData && geoData.features?.length > 0 ? (
+      <div style={{ height: '600px', borderRadius: '12px', overflow: 'hidden' }} className="shadow-lg mb-6">
+        {geoData?.features?.length > 0 ? (
           <MapContainer center={[24.7, 46.7]} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; OpenStreetMap'
             />
-            <GeoJSON
-              data={geoData}
-              onEachFeature={onEachFeature}
-              style={getFeatureStyle}
-              pointToLayer={(feature, latlng) => <Marker position={latlng} icon={defaultIcon} />}
-            />
+            {geoData.features.map((feature, idx) => {
+              if (!feature.geometry) return null
+
+              // Points as markers
+              if (feature.geometry.type === 'Point') {
+                const [lng, lat] = feature.geometry.coordinates
+                return (
+                  <Marker key={`point-${idx}`} position={[lat, lng]} icon={defaultIcon}>
+                    <Popup>{feature.properties?.name}</Popup>
+                  </Marker>
+                )
+              }
+
+              // Lines and polygons as GeoJSON
+              return (
+                <GeoJSONLayer
+                  key={`geo-${idx}`}
+                  data={feature}
+                  onEachFeature={onEachFeature}
+                  style={getStyle}
+                />
+              )
+            })}
           </MapContainer>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-600 flex-col gap-4">
-            <div>لا توجد بيانات خريطة</div>
-            {!loading && <p className="text-sm text-gray-500">تأكد من تشغيل build-data</p>}
+          <div className="flex items-center justify-center h-full text-gray-600">
+            <div>
+              <p className="text-lg mb-2">لا توجد بيانات خريطة</p>
+              <p className="text-sm text-gray-500">عدد الطبقات: {geoData?.features?.length || 0}</p>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="mt-6 card">
-        <h2 className="text-lg font-bold mb-4">مفتاح الألوان</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-500 rounded"></div>
-            <span className="text-sm">0-15 يوم</span>
+      <div className="card">
+        <h2 className="text-lg font-bold mb-4">معلومات الخريطة</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="font-semibold text-gray-600 dark:text-gray-400">إجمالي الطبقات:</span>
+            <p className="text-lg font-bold text-blue-600">{geoData?.features?.length || 0}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-yellow-500 rounded"></div>
-            <span className="text-sm">16-30 يوم</span>
+          <div>
+            <span className="font-semibold text-gray-600 dark:text-gray-400">المركز:</span>
+            <p>الرياض (24.7°N, 46.7°E)</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-orange-500 rounded"></div>
-            <span className="text-sm">31-60 يوم</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-500 rounded"></div>
-            <span className="text-sm">60+ يوم</span>
+          <div>
+            <span className="font-semibold text-gray-600 dark:text-gray-400">مصدر الخريطة:</span>
+            <p>OpenStreetMap</p>
           </div>
         </div>
       </div>
