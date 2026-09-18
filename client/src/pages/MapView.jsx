@@ -36,14 +36,16 @@ export default function MapView() {
   }
 
   const getFeatureStyle = (feature) => {
-    if (feature.geometry.type === 'Point') return {}
+    if (!feature.geometry || feature.geometry.type === 'Point') return {}
 
-    const color = feature.properties.color || '#0066cc'
+    const colors = ['#0066cc', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24']
+    const color = feature.properties?.color || colors[Math.floor(Math.random() * colors.length)]
+
     return {
       color: color,
       weight: 2,
       opacity: 0.7,
-      fillOpacity: 0.3,
+      fillOpacity: 0.2,
       fillColor: color
     }
   }

@@ -16,11 +16,16 @@ export default function ManagerDetail() {
       fetch('/api/reports').then(r => r.json())
     ])
       .then(([managers, allReports]) => {
-        const mgr = managers.find(m => m.id === parseInt(managerId))
+        const mgr = managers.find(m => m.id === managerId)
         setManager(mgr)
 
+        if (!mgr) {
+          setLoading(false)
+          return
+        }
+
         // فلتر البلاغات التي تحت معالجة المقاول وترتبط بمشاريع هذا المدير
-        const managerProjectIds = mgr?.projects?.map(p => p.id) || []
+        const managerProjectIds = mgr.projects?.map(p => p.id) || []
         const managerReports = allReports.filter(r =>
           r.status === 'تحت معالجة المقاول' &&
           r.matched &&

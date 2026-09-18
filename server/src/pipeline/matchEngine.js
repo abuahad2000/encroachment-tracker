@@ -140,17 +140,6 @@ export function processReports(reports, projects, geoJsonData, overrides) {
   const processed = []
 
   for (const report of reports) {
-    // Skip archived
-    if (report.status === 'تمت المعالجة') {
-      processed.push({
-        ...report,
-        archived: true,
-        matched: false,
-        confidence: 0
-      })
-      continue
-    }
-
     // Check for maintenance
     const isMaintenance = isMaintenanceReport(report)
 
@@ -184,6 +173,11 @@ export function processReports(reports, projects, geoJsonData, overrides) {
         ...match,
         isMaintenance
       }
+    }
+
+    // Mark archived if status is processed
+    if (report.status === 'تمت المعالجة') {
+      result.archived = true
     }
 
     // Calculate age in days

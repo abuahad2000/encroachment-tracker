@@ -78,8 +78,9 @@ async function buildData() {
     console.log('\n✅ تم إتمام المعالجة بنجاح!')
     console.log(`\n📊 الإحصائيات:`)
     console.log(`   • إجمالي البلاغات: ${reports.length}`)
-    console.log(`   • المسندة بنجاح: ${stats.assignedCount}`)
-    console.log(`   • المستبعدة تلقائياً: ${stats.excludedCount}`)
+    console.log(`   • البلاغات المطابقة: ${stats.matchedReports}`)
+    console.log(`   • تمت المعالجة: ${stats.processedCount}`)
+    console.log(`   • تحت المعالجة: ${stats.underProcessingCount}`)
     console.log(`   • متوسط التأخير: ${stats.avgDelay} يوم`)
     console.log(`   • آخر تحديث: ${new Date().toLocaleString('ar-SA')}`)
 
@@ -91,12 +92,16 @@ async function buildData() {
 }
 
 function calculateStats(reports, projects) {
-  const assigned = reports.filter(r => r.matched && !r.archived)
-  const excluded = reports.filter(r => r.excluded || r.isMaintenance)
+  // البلاغات المطابقة فقط (مع مشروع)
+  const matched = reports.filter(r => r.matched && !r.archived && !r.excluded)
   const archived = reports.filter(r => r.archived)
   const active = reports.filter(r => !r.archived && r.status !== 'تمت المعالجة')
 
-  const ageDays = active
+  // إحصائيات البلاغات المطابقة
+  const processed = archived.filter(r => r.matched)
+  const underProcessing = matched.filter(r => r.status === 'تحت معالجة المقاول')
+
+  const ageDays = matched
     .filter(r => r.ageDays >= 0)
     .map(r => r.ageDays)
     .sort((a, b) => a - b)
@@ -107,7 +112,7 @@ function calculateStats(reports, projects) {
   }
 
   const topManagers = {}
-  for (const r of assigned) {
+  for (const r of matched) {
     if (r.project?.programManager) {
       topManagers[r.project.programManager] = (topManagers[r.project.programManager] || 0) + 1
     }
@@ -115,9 +120,9 @@ function calculateStats(reports, projects) {
 
   return {
     totalReports: reports.length,
-    totalActive: active.length,
-    assignedCount: assigned.length,
-    excludedCount: excluded.length,
+    matchedReports: matched.length,
+    processedCount: processed.length,
+    underProcessingCount: underProcessing.length,
     archivedCount: archived.length,
     avgDelay: ageDays.length > 0 ? Math.round(ageDays.reduce((a, b) => a + b) / ageDays.length) : 0,
     medianDelay: ageDays.length > 0 ? ageDays[Math.floor(ageDays.length / 2)] : 0,
@@ -143,18 +148,18 @@ function createManagersData(projects, reports) {
       managers[mgr] = {
         name: mgr,
         projects: [],
-        activeReports: []
+        reports: []
       }
     }
     managers[mgr].projects.push(proj)
   }
 
-  // Add reports to managers
+  // Add reports to managers (only matched reports under processing)
   for (const report of reports) {
-    if (report.matched && report.project) {
+    if (report.matched && report.project && report.status === 'تحت معالجة المقاول') {
       const mgr = report.project.programManager
       if (managers[mgr]) {
-        managers[mgr].activeReports.push(report)
+        managers[mgr].reports.push(report)
       }
     }
   }
@@ -164,11 +169,17 @@ function createManagersData(projects, reports) {
     id: m.name.toLowerCase().replace(/\s+/g, '-'),
     name: m.name,
     scope: m.projects[0]?.subProgram || 'متعدد',
+    subProgram: m.projects[0]?.subProgram || '',
     activeProjects: m.projects.filter(p => p.status === 'جاري').length,
     deliveredProjects: m.projects.filter(p => p.status === 'مسلم ابتدائي').length,
-    activeReports: m.activeReports.length,
+    activeReports: m.reports.length,
     phone: m.projects[0]?.progPhone || '-',
     email: m.projects[0]?.progEmail || '-',
+    projects: m.projects.map(p => ({
+      id: p.id,
+      name: p.name,
+      status: p.status
+    }))
   }))
 }
 
