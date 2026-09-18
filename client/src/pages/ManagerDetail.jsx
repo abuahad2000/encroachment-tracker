@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 
 export default function ManagerDetail() {
   const { managerId } = useParams()
@@ -7,8 +7,12 @@ export default function ManagerDetail() {
   const [manager, setManager] = useState(null)
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('pending') // 'pending' | 'processed' | 'all'
   const [selectedReport, setSelectedReport] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [editContractorReport, setEditContractorReport] = useState(null)
+  const [contractorInput, setContractorInput] = useState('')
+  const [savingContractor, setSavingContractor] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -16,7 +20,14 @@ export default function ManagerDetail() {
       fetch('/api/reports').then(r => r.json())
     ])
       .then(([managers, allReports]) => {
-        const mgr = managers.find(m => m.id === managerId)
+        const decodedId = decodeURIComponent(managerId).toLowerCase()
+        const mgr = managers.find(m => 
+          m.id === managerId || 
+          m.slug === managerId || 
+          m.id === decodedId ||
+          m.name.toLowerCase() === decodedId ||
+          m.name.replace(/\s+/g, '-').toLowerCase() === decodedId
+        )
         setManager(mgr)
 
         if (!mgr) {
@@ -24,15 +35,15 @@ export default function ManagerDetail() {
           return
         }
 
-        // فلتر البلاغات التي تحت معالجة المقاول وترتبط بمشاريع هذا المدير
-        const managerProjectIds = mgr.projects?.map(p => p.id) || []
-        const managerReports = allReports.filter(r =>
-          r.status === 'تحت معالجة المقاول' &&
+        const managerProjectIds = (mgr.projects || []).map(p => String(p.id))
+        const matchedReports = allReports.filter(r =>
+          !r.excluded &&
           r.matched &&
           r.project &&
-          managerProjectIds.includes(r.project.id)
+          (r.project.programManager === mgr.name || managerProjectIds.includes(String(r.project.id)))
         )
-        setReports(managerReports)
+
+        setReports(matchedReports)
         setLoading(false)
       })
       .catch(e => {
@@ -41,7 +52,22 @@ export default function ManagerDetail() {
       })
   }, [managerId])
 
+  const pendingReports = useMemo(() => {
+    return reports.filter(r => r.status !== 'تمت المعالجة')
+  }, [reports])
+
+  const processedReports = useMemo(() => {
+    return reports.filter(r => r.status === 'تمت المعالجة')
+  }, [reports])
+
+  const displayedReports = useMemo(() => {
+    if (activeTab === 'pending') return pendingReports
+    if (activeTab === 'processed') return processedReports
+    return reports
+  }, [activeTab, pendingReports, processedReports, reports])
+
   const handleExclude = async (reportId) => {
+    if (!confirm('هل أنت متأكد من استبعاد هذا البلاغ من نطاق المشروع؟')) return
     try {
       const res = await fetch('/api/override', {
         method: 'POST',
@@ -58,179 +84,419 @@ export default function ManagerDetail() {
     }
   }
 
-  if (loading) return <div className="text-center py-8">جاري التحميل...</div>
-  if (!manager) return <div className="text-center py-8">لم يتم العثور على المدير</div>
+  const handleSaveContractor = async () => {
+    if (!editContractorReport) return
+    setSavingContractor(true)
+    try {
+      const res = await fetch('/api/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId: editContractorReport.id,
+          customContractor: contractorInput.trim(),
+          reason: 'تعديل اسم المقاول'
+        })
+      })
+      if (res.ok) {
+        setReports(reports.map(r => {
+          if (r.id === editContractorReport.id) {
+            return {
+              ...r,
+              contractorName: contractorInput.trim(),
+              customContractor: contractorInput.trim()
+            }
+          }
+          return r
+        }))
+        if (selectedReport && selectedReport.id === editContractorReport.id) {
+          setSelectedReport({
+            ...selectedReport,
+            contractorName: contractorInput.trim(),
+            customContractor: contractorInput.trim()
+          })
+        }
+        setEditContractorReport(null)
+        alert('تم حفظ المقاول بنجاح مع استمرار ربط البلاغ بالمشروع ومدير البرنامج')
+      }
+    } catch (e) {
+      console.error('Error saving contractor:', e)
+      alert('حدث خطأ أثناء الحفظ')
+    } finally {
+      setSavingContractor(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-300 font-medium">جاري تحميل لوحة مدير البرنامج...</p>
+      </div>
+    )
+  }
+
+  if (!manager) {
+    return (
+      <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
+        <p className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-2">لم يتم العثور على مدير البرنامج</p>
+        <button
+          onClick={() => navigate('/managers')}
+          className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition"
+        >
+          ← عودة إلى قائمة المدراء
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div>
-      <button
-        onClick={() => navigate('/managers')}
-        className="text-blue-600 hover:underline mb-6"
-      >
-        ← عودة إلى المدراء
-      </button>
+    <div className="space-y-6">
+      {/* Back link */}
+      <div>
+        <button
+          onClick={() => navigate('/managers')}
+          className="text-primary-600 dark:text-primary-400 text-sm font-semibold hover:underline inline-flex items-center gap-1"
+        >
+          <span>←</span>
+          <span>العودة إلى بطاقات مدراء البرامج</span>
+        </button>
+      </div>
 
-      <div className="card mb-8 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30">
-        <h1 className="text-3xl font-bold mb-4">{manager.name}</h1>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      {/* Manager Header Card */}
+      <div className="bg-gradient-to-l from-blue-50 via-white to-blue-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800/90 border border-blue-100 dark:border-gray-700 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
-            <label className="font-semibold text-gray-600 dark:text-gray-400">الحي/الحيز</label>
-            <p>{manager.scope}</p>
+            <div className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 mb-2">
+              {manager.scope}
+            </div>
+            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+              <span>👤</span>
+              <span>{manager.name}</span>
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              لوحة المتابعة الشاملة لبلاغات التعدي والمشاريع الرأسمالية المسندة
+            </p>
           </div>
-          <div>
-            <label className="font-semibold text-gray-600 dark:text-gray-400">المشاريع الجارية</label>
-            <p className="text-lg font-bold text-blue-600">{manager.activeProjects}</p>
-          </div>
-          <div>
-            <label className="font-semibold text-gray-600 dark:text-gray-400">البلاغات المسندة</label>
-            <p className="text-lg font-bold text-orange-600">{reports.length}</p>
-          </div>
-          <div>
-            <label className="font-semibold text-gray-600 dark:text-gray-400">الحالة</label>
-            <p className="text-green-600">نشط</p>
+
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-center min-w-[100px]">
+              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 block">البلاغات المعلقة</span>
+              <span className="text-2xl font-bold text-amber-700 dark:text-amber-300">{pendingReports.length}</span>
+            </div>
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl text-center min-w-[100px]">
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 block">تمت المعالجة</span>
+              <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{processedReports.length}</span>
+            </div>
           </div>
         </div>
 
-        <div className="mt-6 pt-6 border-t dark:border-blue-700 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <label className="font-semibold block mb-1">📱 الهاتف</label>
-            <p className="text-gray-700 dark:text-gray-300">{manager.phone}</p>
+        {/* Contact info */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700/80 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">📱 الهاتف:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{manager.phone}</span>
           </div>
-          <div>
-            <label className="font-semibold block mb-1">📧 البريد الإلكتروني</label>
-            <p className="text-gray-700 dark:text-gray-300">{manager.email}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">📧 البريد:</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">{manager.email}</span>
           </div>
-          <div>
-            <label className="font-semibold block mb-1">🏢 الفرع</label>
-            <p className="text-gray-700 dark:text-gray-300">{manager.subProgram || 'غير محدد'}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400">🏗️ المشاريع الجارية:</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400">{manager.activeProjects || 0} مشروعاً</span>
           </div>
         </div>
       </div>
 
-      <h2 className="text-2xl font-bold mb-6">البلاغات تحت معالجة المقاول ({reports.length})</h2>
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            activeTab === 'pending'
+              ? 'bg-amber-500 text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+          }`}
+        >
+          <span>⏳ البلاغات المعلقة</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'pending' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
+            {pendingReports.length}
+          </span>
+        </button>
 
-      {reports.length === 0 ? (
-        <div className="card text-center py-8 text-gray-600 dark:text-gray-400">
-          لا توجد بلاغات تحت معالجة حالياً
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm card">
-            <thead className="bg-gray-100 dark:bg-slate-800">
-              <tr>
-                <th className="px-4 py-2 text-right">رقم البلاغ</th>
-                <th className="px-4 py-2 text-right">المشروع</th>
-                <th className="px-4 py-2 text-right">الحي</th>
-                <th className="px-4 py-2 text-right">أيام التأخير</th>
-                <th className="px-4 py-2 text-right">الإجراء</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map(r => (
-                <tr key={r.id} className="border-b dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">
-                  <td className="px-4 py-2 font-mono">#{r.id}</td>
-                  <td className="px-4 py-2 text-xs text-gray-600 dark:text-gray-400">
-                    {r.project?.name.substring(0, 40)}...
-                  </td>
-                  <td className="px-4 py-2">{r.district}</td>
-                  <td className="px-4 py-2">
-                    <span className={`font-bold px-2 py-1 rounded ${
-                      r.ageDays > 60 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                      r.ageDays > 30 ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
-                      r.ageDays > 15 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                    }`}>
-                      {r.ageDays}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 flex gap-2">
-                    <button
-                      className="text-blue-600 hover:underline text-xs"
-                      onClick={() => { setSelectedReport(r); setShowDetails(true); }}
-                    >
-                      عرض
-                    </button>
-                    <button
-                      className="text-red-600 hover:underline text-xs"
-                      onClick={() => {
-                        if (confirm('هل تريد استبعاد هذا البلاغ؟')) {
-                          handleExclude(r.id);
-                        }
-                      }}
-                    >
-                      حذف
-                    </button>
-                  </td>
+        <button
+          onClick={() => setActiveTab('processed')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            activeTab === 'processed'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+          }`}
+        >
+          <span>✅ البلاغات التي تمت معالجتها</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'processed' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
+            {processedReports.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            activeTab === 'all'
+              ? 'bg-white dark:bg-gray-700 text-primary-700 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+          }`}
+        >
+          <span>📋 كافة البلاغات المسندة</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'all' ? 'bg-primary-100 text-primary-800 dark:bg-primary-900' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            {reports.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Reports Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        {displayedReports.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/60 text-xs font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                <tr>
+                  <th className="px-4 py-3">رقم البلاغ</th>
+                  <th className="px-4 py-3">تاريخ البلاغ</th>
+                  <th className="px-4 py-3">الحي / المدينة</th>
+                  <th className="px-4 py-3">المشروع المسند</th>
+                  <th className="px-4 py-3">المقاول</th>
+                  <th className="px-4 py-3">حالة البلاغ</th>
+                  <th className="px-4 py-3">التأخير</th>
+                  <th className="px-4 py-3 text-center">الإجراءات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {displayedReports.map(r => {
+                  const isProcessed = r.status === 'تمت المعالجة'
+                  const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
+
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition">
+                      <td className="px-4 py-3 font-bold text-primary-600 dark:text-primary-400">
+                        {r.id}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {r.dateReport || r.dateIncident || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-semibold text-gray-900 dark:text-white block">{r.district || r.city}</span>
+                        {r.street && <span className="text-xs text-gray-400 block">{r.street}</span>}
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <span className="font-medium text-gray-900 dark:text-gray-200 block truncate" title={r.project?.name}>
+                          {r.project?.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                            {effectiveContractor}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditContractorReport(r)
+                              setContractorInput(effectiveContractor === 'غير محدد' ? '' : effectiveContractor)
+                            }}
+                            title="تعديل المقاول"
+                            className="text-gray-400 hover:text-blue-600 text-xs p-1"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          isProcessed
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                          r.ageDays > 60 ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
+                          r.ageDays > 30 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' :
+                          'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
+                        }`}>
+                          {r.ageDays} يوم
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => { setSelectedReport(r); setShowDetails(true); }}
+                          className="px-2.5 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded-lg transition"
+                        >
+                          التفاصيل
+                        </button>
+                        {!isProcessed && (
+                          <button
+                            onClick={() => handleExclude(r.id)}
+                            className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition mr-1"
+                          >
+                            استبعاد
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-12 text-center text-gray-500">
+            <span className="text-3xl block mb-2">🎉</span>
+            <p className="font-semibold">لا توجد بلاغات في هذا التبويب حالياً</p>
+          </div>
+        )}
+      </div>
 
       {/* Modal تفاصيل البلاغ */}
       {showDetails && selectedReport && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold">تفاصيل البلاغ #{selectedReport.id}</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-start mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <span className="text-xs text-primary-600 dark:text-primary-400 font-semibold block">تفاصيل بلاغ التعدي</span>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">بلاغ رقم #{selectedReport.id}</h2>
+              </div>
               <button
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg p-1"
                 onClick={() => setShowDetails(false)}
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">الحي والشارع</label>
+                  <p className="font-bold text-gray-800 dark:text-gray-200">{selectedReport.district || selectedReport.city} - {selectedReport.street || 'غير محدد'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">حالة البلاغ</label>
+                  <p className="font-bold text-amber-600">{selectedReport.status}</p>
+                </div>
+              </div>
+
               <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">الوصف</label>
-                <p className="text-sm mt-1">{selectedReport.description}</p>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">وصف التعدي الميداني</label>
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl text-gray-700 dark:text-gray-300 text-xs leading-relaxed">
+                  {selectedReport.description}
+                </div>
               </div>
 
-              <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">تأثير التعدي</label>
-                <p className="text-sm mt-1">{selectedReport.impact}</p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              {selectedReport.centerComment && (
                 <div>
-                  <label className="font-semibold text-gray-600 dark:text-gray-400">الحي</label>
-                  <p>{selectedReport.district}</p>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">إفادة مركز مشاريع البنية التحتية (RIPC)</label>
+                  <div className="p-3 bg-blue-50/60 dark:bg-blue-950/40 rounded-xl text-gray-700 dark:text-gray-300 text-xs leading-relaxed">
+                    {selectedReport.centerComment}
+                  </div>
                 </div>
-                <div>
-                  <label className="font-semibold text-gray-600 dark:text-gray-400">الشارع</label>
-                  <p>{selectedReport.street}</p>
-                </div>
-                <div>
-                  <label className="font-semibold text-gray-600 dark:text-gray-400">أيام التأخير</label>
-                  <p className="font-bold text-orange-600">{selectedReport.ageDays}</p>
-                </div>
-              </div>
+              )}
 
-              <div className="border-t dark:border-slate-700 pt-4">
-                <h3 className="font-semibold mb-2">ملخص سجل المحادثات</h3>
-                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-                  {selectedReport.conversationLog?.slice(0, 3).map((log, i) => (
-                    <p key={i} className="line-clamp-2">• {log}</p>
-                  ))}
+              {/* Project Card */}
+              {selectedReport.project && (
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2">
+                  <div className="text-xs font-bold text-gray-500">المشروع الرأسمالي المسند:</div>
+                  <div className="font-bold text-gray-900 dark:text-white">{selectedReport.project.name}</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div><strong>رقم العملية:</strong> {selectedReport.project.operationNumber || '-'}</div>
+                    <div><strong>مدير البرنامج:</strong> {selectedReport.project.programManager || '-'}</div>
+                    <div>
+                      <strong>المقاول:</strong> {selectedReport.contractorName || selectedReport.project.contractor || 'غير محدد'}
+                    </div>
+                    <div><strong>حالة المشروع:</strong> {selectedReport.project.status}</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="border-t dark:border-slate-700 pt-4 flex gap-2">
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition"
                   onClick={() => setShowDetails(false)}
                 >
                   إغلاق
                 </button>
                 <button
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
                   onClick={() => {
-                    handleExclude(selectedReport.id);
+                    setEditContractorReport(selectedReport)
+                    setContractorInput(selectedReport.contractorName || selectedReport.project?.contractor || '')
+                    setShowDetails(false)
                   }}
                 >
-                  استبعاد البلاغ
+                  ✏️ تعديل المقاول
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal تعديل المقاول */}
+      {editContractorReport && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+              تعديل اسم المقاول للبلاغ #{editContractorReport.id}
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              يمكنك كتابة اسم المقاول الفعلي أو تركه فارغاً مع بقاء البلاغ مرتبطاً بالمشروع ومدير البرنامج ({manager.name}).
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  اسم المقاول
+                </label>
+                <input
+                  type="text"
+                  placeholder="اتركه فارغاً إذا لم يوجد مقاول..."
+                  value={contractorInput}
+                  onChange={e => setContractorInput(e.target.value)}
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setContractorInput('')}
+                  className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200"
+                >
+                  تفريغ (تركه فارغاً)
+                </button>
+                {editContractorReport.project?.contractor && (
+                  <button
+                    type="button"
+                    onClick={() => setContractorInput(editContractorReport.project.contractor)}
+                    className="px-3 py-1.5 text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100"
+                  >
+                    استخدام مقاول المشروع
+                  </button>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={() => setEditContractorReport(null)}
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition text-sm"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleSaveContractor}
+                  disabled={savingContractor}
+                  className="flex-1 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition text-sm disabled:opacity-50"
+                >
+                  {savingContractor ? 'جاري الحفظ...' : 'حفظ التعديل'}
                 </button>
               </div>
             </div>

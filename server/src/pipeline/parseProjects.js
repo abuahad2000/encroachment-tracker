@@ -72,8 +72,20 @@ export function parseProjects() {
       }
 
       if (project.operation_number) {
+        // Fallback manager for governorate projects where '-' was placed in cards
+        let rawMgr = project.program_manager
+        if (!rawMgr || rawMgr === '-') {
+          if (project.sub_program?.includes('المحافظات الجنوبية')) {
+            rawMgr = 'شاكر الحقباني'
+          } else if (project.sub_program?.includes('المحافظات الغربية')) {
+            rawMgr = 'سعيد الحارث'
+          } else if (project.sub_program?.includes('المحافظات الشمالية')) {
+            rawMgr = 'علي القحطاني'
+          }
+        }
+
         // Normalize manager name
-        const normalizedMgr = MANAGER_NAME_MAP[project.program_manager] || project.program_manager
+        const normalizedMgr = MANAGER_NAME_MAP[rawMgr] || rawMgr || 'غير محدد'
         projects.push({
           id: project.id,
           operationNumber: project.operation_number,
@@ -88,8 +100,16 @@ export function parseProjects() {
           execPhone: project.exec_phone,
           execEmail: project.exec_email,
           programManager: normalizedMgr,
-          progPhone: project.prog_phone,
-          progEmail: project.prog_email,
+          progPhone: project.prog_phone && project.prog_phone !== '-' ? project.prog_phone : (
+            rawMgr === 'سعيد الحارث' ? '598991815' :
+            rawMgr === 'شاكر الحقباني' ? '555022025' :
+            rawMgr === 'علي القحطاني' ? '555299813' : '-'
+          ),
+          progEmail: project.prog_email && project.prog_email !== '-' ? project.prog_email : (
+            rawMgr === 'سعيد الحارث' ? 'salharth@nwc.com.sa' :
+            rawMgr === 'شاكر الحقباني' ? 'talnoufal@nwc.com.sa' :
+            rawMgr === 'علي القحطاني' ? 'aaalqahtani@nwc.com.sa' : '-'
+          ),
           projectManager: project.project_manager,
           projPhone: project.proj_phone,
           projEmail: project.proj_email,

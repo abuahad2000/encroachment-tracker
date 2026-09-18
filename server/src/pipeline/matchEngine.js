@@ -191,34 +191,57 @@ export function matchReportToProject(report, activeProjects, prelinkedProjects) 
 
     // 2. المطابقة التعاقدية الصارمة للمقاول والحي
     if (!spatialMatch && report.contractorName && report.contractorName.toUpperCase() !== 'NULL') {
-      const contractorMatched = matchContractor(report.contractorName, [project.contractor])
+      // قاعدة مشاريع المحافظات (خارج مدينة الرياض): الربط بالمقاول المتوفر في بيانات الإكسيل
+      const isGovProject = project.subProgram?.includes('المحافظات')
+      const isGovReport = report.city && !report.city.includes('الرياض')
 
-      if (contractorMatched) {
-        // استثناء مشاريع م. عبدالله الأسود (تغطية شاملة لمدينة الرياض)
-        const isAswadProject = (project.subProgram === 'المتفرقات' || (project.programManager && project.programManager.includes('عبدالله الأسود')))
-        const isAswadContractor = matchContractor(report.contractorName, ABDULLAH_AL_ASWAD_CONTRACTORS)
+      if (isGovReport && isGovProject) {
+        const contractorMatched = matchContractor(report.contractorName, [project.contractor])
+        if (contractorMatched) {
+          const cleanCity = normalizeArabic(report.city).replace('محافظة', '').trim().toLowerCase()
+          const fullScope = normalizeArabic((project.scope || '') + ' ' + (project.name || '')).toLowerCase()
+          const cityMatched = fullScope.includes(cleanCity) || 
+                              (cleanCity === 'الرويضة' && fullScope.includes('القويعية')) ||
+                              (cleanCity === 'مرات' && fullScope.includes('شقراء'))
 
-        if (isAswadProject && isAswadContractor) {
-          confidence = Math.max(confidence, 0.85)
-          reason.push('contractor:aswad_exception')
-        } else {
-          // شرط صارم: تطابق الحي إلزامي للمقاول!
-          // بعض المقاولين يعملون بمشاريع أخرى تتبع التشغيل والصيانة
-          const districtMatched = matchDistrict(report.district, project.scope)
+          if (cityMatched) {
+            confidence = Math.max(confidence, 0.95)
+            reason.push('governorate:contractor+city')
+          } else {
+            confidence = Math.max(confidence, 0.85)
+            reason.push('governorate:contractor')
+          }
+        }
+      } else {
+        const contractorMatched = matchContractor(report.contractorName, [project.contractor])
 
-          if (districtMatched) {
-            const fullText = normalizeArabic(`${report.description} ${report.centerComment} ${report.licenseNumber}`)
-            const normProj = normalizeArabic(project.name)
-            const hasProjRef = (project.operationNumber && fullText.includes(project.operationNumber)) ||
-                               (project.po && fullText.includes(project.po)) ||
-                               fullText.includes(normProj)
+        if (contractorMatched) {
+          // استثناء مشاريع م. عبدالله الأسود (تغطية شاملة لمدينة الرياض)
+          const isAswadProject = (project.subProgram === 'المتفرقات' || (project.programManager && project.programManager.includes('عبدالله الأسود')))
+          const isAswadContractor = matchContractor(report.contractorName, ABDULLAH_AL_ASWAD_CONTRACTORS)
 
-            if (hasProjRef) {
-              confidence = Math.max(confidence, 0.90)
-              reason.push('contractor+district+proj_ref')
-            } else {
-              confidence = Math.max(confidence, 0.75)
-              reason.push('contractor+district')
+          if (isAswadProject && isAswadContractor) {
+            confidence = Math.max(confidence, 0.85)
+            reason.push('contractor:aswad_exception')
+          } else {
+            // شرط صارم: تطابق الحي إلزامي للمقاول!
+            // بعض المقاولين يعملون بمشاريع أخرى تتبع التشغيل والصيانة
+            const districtMatched = matchDistrict(report.district, project.scope)
+
+            if (districtMatched) {
+              const fullText = normalizeArabic(`${report.description} ${report.centerComment} ${report.licenseNumber}`)
+              const normProj = normalizeArabic(project.name)
+              const hasProjRef = (project.operationNumber && fullText.includes(project.operationNumber)) ||
+                                 (project.po && fullText.includes(project.po)) ||
+                                 fullText.includes(normProj)
+
+              if (hasProjRef) {
+                confidence = Math.max(confidence, 0.90)
+                reason.push('contractor+district+proj_ref')
+              } else {
+                confidence = Math.max(confidence, 0.75)
+                reason.push('contractor+district')
+              }
             }
           }
         }
@@ -356,6 +379,11 @@ export function processReports(reports, projects, geoJsonData, overrides) {
         ...match,
         isMaintenance
       }
+    }
+
+    if (override?.customContractor !== undefined) {
+      result.contractorName = override.customContractor
+      result.customContractor = override.customContractor
     }
 
     if (report.status === 'تمت المعالجة') {

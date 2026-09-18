@@ -138,49 +138,84 @@ function calculateStats(reports, projects) {
   }
 }
 
+const MANAGER_SLUGS = {
+  'تركي ظافر يحيى الاسمري': 'turki-alasmari',
+  'تركي الاسمري': 'turki-alasmari',
+  'عسكر لسلوم': 'askar-lasloum',
+  'عبدالله علي العنزي': 'abdullah-alenezi',
+  'عبدالله العنزي': 'abdullah-alenezi',
+  'سفر العتيبي': 'safar-alotaibi',
+  'علي الشهري': 'ali-alshehri',
+  'أمجد الفالح': 'amjad-alfaleh',
+  'عبدالله الأسود العنزي': 'abdullah-alaswad',
+  'عبدالله الأسود': 'abdullah-alaswad',
+  'علي القحطاني': 'ali-alqahtani',
+  'شاكر الحقباني': 'shaker-alhaqbani',
+  'سعيد الحارث': 'saeed-alharthe'
+}
+
 function createManagersData(projects, reports) {
   const managers = {}
 
   // Group projects by manager
   for (const proj of projects) {
     const mgr = proj.programManager
+    if (!mgr || mgr === '-' || mgr === 'غير محدد') continue
     if (!managers[mgr]) {
       managers[mgr] = {
         name: mgr,
         projects: [],
-        reports: []
+        reports: [],
+        pendingReports: [],
+        processedReports: []
       }
     }
     managers[mgr].projects.push(proj)
   }
 
-  // Add reports to managers (only matched reports under processing)
+  // Add reports to managers
   for (const report of reports) {
-    if (report.matched && report.project && report.status === 'تحت معالجة المقاول') {
+    if (report.matched && report.project && !report.excluded) {
       const mgr = report.project.programManager
       if (managers[mgr]) {
         managers[mgr].reports.push(report)
+        if (report.status === 'تمت المعالجة') {
+          managers[mgr].processedReports.push(report)
+        } else {
+          managers[mgr].pendingReports.push(report)
+        }
       }
     }
   }
 
   // Convert to array with stats
-  return Object.values(managers).map(m => ({
-    id: m.name.toLowerCase().replace(/\s+/g, '-'),
-    name: m.name,
-    scope: m.projects[0]?.subProgram || 'متعدد',
-    subProgram: m.projects[0]?.subProgram || '',
-    activeProjects: m.projects.filter(p => p.status === 'جاري').length,
-    deliveredProjects: m.projects.filter(p => p.status === 'مسلم ابتدائي').length,
-    activeReports: m.reports.length,
-    phone: m.projects[0]?.progPhone || '-',
-    email: m.projects[0]?.progEmail || '-',
-    projects: m.projects.map(p => ({
-      id: p.id,
-      name: p.name,
-      status: p.status
-    }))
-  }))
+  return Object.values(managers).map(m => {
+    const slug = MANAGER_SLUGS[m.name] || encodeURIComponent(m.name.toLowerCase().replace(/\s+/g, '-'))
+    const firstProj = m.projects[0]
+    return {
+      id: slug,
+      slug,
+      name: m.name,
+      scope: firstProj?.subProgram || 'متعدد',
+      subProgram: firstProj?.subProgram || '',
+      activeProjects: m.projects.filter(p => p.status === 'جاري').length,
+      deliveredProjects: m.projects.filter(p => p.status === 'مسلم ابتدائي').length,
+      totalProjects: m.projects.length,
+      pendingReportsCount: m.pendingReports.length,
+      processedReportsCount: m.processedReports.length,
+      activeReports: m.pendingReports.length, // التوافق مع الحقول السابقة
+      totalReportsCount: m.reports.length,
+      phone: firstProj?.progPhone || '-',
+      email: firstProj?.progEmail || '-',
+      projects: m.projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        scope: p.scope,
+        status: p.status,
+        contractor: p.contractor
+      }))
+    }
+  }).sort((a, b) => b.pendingReportsCount - a.pendingReportsCount)
 }
 
 buildData()

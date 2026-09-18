@@ -218,31 +218,64 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
 // Save override
 app.post('/api/override', (req, res) => {
-  const { reportId, projectId, excluded, reason } = req.body
+  const { reportId, projectId, excluded, reason, customContractor } = req.body
 
   const overridesPath = path.join(__dirname, '../data/overrides.json')
   let overrides = []
 
   if (fs.existsSync(overridesPath)) {
-    overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+    try {
+      overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+    } catch (e) {
+      overrides = []
+    }
   }
 
-  // Remove existing override for this report
-  overrides = overrides.filter(o => o.reportId !== reportId)
+  // Find existing or create new
+  const existingIndex = overrides.findIndex(o => o.reportId === reportId)
+  const entry = existingIndex >= 0 ? { ...overrides[existingIndex] } : { reportId }
 
-  // Add new override
-  if (projectId || excluded) {
-    overrides.push({
-      reportId,
-      projectId: projectId || null,
-      excluded: excluded || false,
-      reason: reason || null,
-      timestamp: new Date().toISOString()
-    })
+  if (projectId !== undefined) entry.projectId = projectId || null
+  if (excluded !== undefined) entry.excluded = !!excluded
+  if (reason !== undefined) entry.reason = reason
+  if (customContractor !== undefined) entry.customContractor = customContractor
+
+  entry.timestamp = new Date().toISOString()
+
+  if (existingIndex >= 0) {
+    overrides[existingIndex] = entry
+  } else {
+    overrides.push(entry)
   }
 
   fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
-  res.json({ success: true, overrides })
+
+  // Update reports.json in generated data directly for immediate response
+  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+  if (fs.existsSync(reportsPath)) {
+    try {
+      const reports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
+      const rIdx = reports.findIndex(r => r.id === reportId)
+      if (rIdx >= 0) {
+        if (customContractor !== undefined) {
+          reports[rIdx].contractorName = customContractor
+          reports[rIdx].customContractor = customContractor
+        }
+        if (excluded !== undefined) {
+          reports[rIdx].excluded = !!excluded
+          if (excluded) {
+            reports[rIdx].matched = false
+            reports[rIdx].excludedReason = reason || 'user_excluded'
+          }
+        }
+        fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2))
+      }
+    } catch (e) {
+      console.error('Error updating reports.json with override:', e.message)
+    }
+  }
+
+  res.json({ success: true, overrides, updatedReportId: reportId })
 })
 
 // Refresh data
