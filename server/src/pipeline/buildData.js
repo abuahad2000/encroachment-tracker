@@ -8,7 +8,7 @@ import { processReports } from './matchEngine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-async function buildData() {
+export async function buildData() {
   console.log('🔄 جاري معالجة البيانات...')
 
   try {
@@ -87,7 +87,7 @@ async function buildData() {
     return { success: true, stats }
   } catch (err) {
     console.error('❌ خطأ في المعالجة:', err.message)
-    process.exit(1)
+    throw err
   }
 }
 
@@ -218,4 +218,7 @@ function createManagersData(projects, reports) {
   }).sort((a, b) => b.pendingReportsCount - a.pendingReportsCount)
 }
 
-buildData()
+// Run if called directly from CLI
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  buildData().catch(() => process.exit(1))
+}

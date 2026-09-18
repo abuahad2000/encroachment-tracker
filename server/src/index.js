@@ -3,12 +3,10 @@ import cors from 'cors'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { exec } from 'child_process'
-import { promisify } from 'util'
 import multer from 'multer'
+import { buildData } from './pipeline/buildData.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const execAsync = promisify(exec)
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -183,7 +181,7 @@ app.get('/api/layers', (req, res) => {
 app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' })
+      return res.status(400).json({ error: 'لم يتم استلام أي ملف' })
     }
 
     const uploadedPath = req.file.path
@@ -197,22 +195,29 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
     // Replace the old file with the new one
     fs.copyFileSync(uploadedPath, targetPath)
-    fs.unlinkSync(uploadedPath) // Delete temp file
+    try {
+      fs.unlinkSync(uploadedPath) // Delete temp file
+    } catch (e) {
+      console.warn('Could not delete temp uploaded file:', e.message)
+    }
 
-    // Trigger data rebuild
+    // Trigger data rebuild directly in-process
     console.log('📤 New reports file uploaded, rebuilding data...')
-    const buildScript = path.join(__dirname, 'pipeline/buildData.js')
-    await execAsync(`node ${buildScript}`)
+    const result = await buildData()
 
     res.json({
       success: true,
-      message: 'File uploaded and data rebuilt successfully',
+      message: 'تم رفع الملف وإعادة معالجة البيانات بنجاح',
       file: req.file.originalname,
+      stats: result?.stats,
       timestamp: new Date().toISOString()
     })
   } catch (err) {
-    console.error('❌ Error uploading file:', err)
-    res.status(500).json({ error: 'Failed to upload file', details: err.message })
+    console.error('❌ Error uploading/processing file:', err)
+    res.status(500).json({ 
+      error: 'فشل في رفع ومعالجة الملف', 
+      details: err.message 
+    })
   }
 })
 

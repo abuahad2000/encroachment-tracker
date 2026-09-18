@@ -49,8 +49,14 @@ export default function FileUpload({ onSuccess }) {
       setProgress(100)
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'خطأ في رفع الملف')
+        let errText = 'خطأ في رفع الملف'
+        try {
+          const data = await response.json()
+          errText = data.details ? `${data.error}: ${data.details}` : (data.error || errText)
+        } catch {
+          errText = `خطأ في الخادم (${response.status})`
+        }
+        throw new Error(errText)
       }
 
       const data = await response.json()
