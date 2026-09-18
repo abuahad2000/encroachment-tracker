@@ -11,9 +11,13 @@ const execAsync = promisify(exec)
 
 const app = express()
 const PORT = process.env.PORT || 3000
+const NODE_ENV = process.env.NODE_ENV || 'development'
 
 // Middleware
-app.use(cors())
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  credentials: true
+}))
 app.use(express.json())
 
 // Utility to load generated data
