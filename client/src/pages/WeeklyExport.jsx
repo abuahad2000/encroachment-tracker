@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import html2canvas from 'html-to-image'
+import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 
 export default function WeeklyExport() {
@@ -8,13 +8,12 @@ export default function WeeklyExport() {
   const exportPNG = async () => {
     if (!contentRef.current) return
     try {
-      const canvas = await html2canvas(contentRef.current, {
-        scale: 2,
-        allowTaint: true,
-        useCORS: true,
+      const imgData = await toPng(contentRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
       })
       const link = document.createElement('a')
-      link.href = canvas.toDataURL('image/png')
+      link.href = imgData
       link.download = `تقرير-التعديات-${new Date().toISOString().split('T')[0]}.png`
       link.click()
     } catch (e) {
@@ -26,19 +25,25 @@ export default function WeeklyExport() {
   const exportPDF = async () => {
     if (!contentRef.current) return
     try {
-      const canvas = await html2canvas(contentRef.current, {
-        scale: 2,
-        allowTaint: true,
-        useCORS: true,
+      const imgData = await toPng(contentRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
       })
-      const imgData = canvas.toDataURL('image/png')
+
+      // Get dimensions from the element
+      const element = contentRef.current
+      const width = element.offsetWidth
+      const height = element.offsetHeight
+
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: height > width ? 'portrait' : 'landscape',
         unit: 'mm',
         format: 'a4',
       })
-      const imgWidth = 210
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+      const imgWidth = pdf.internal.pageSize.getWidth()
+      const imgHeight = (height * imgWidth) / width
+
       pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
       pdf.save(`تقرير-التعديات-${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (e) {
