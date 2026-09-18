@@ -1,20 +1,23 @@
-// تطبيع النصوص العربية: إزالة الهمزات، توحيد التاء المربوطة، إلخ
+// تطبيع النصوص العربية: إزالة الهمزات، توحيد التاء المربوطة، وإزالة علامات الترقيم
 export function normalizeArabic(text) {
   if (!text) return ''
   return text
     .replace(/[أإآا]/g, 'ا')      // Alef variations
     .replace(/ى/g, 'ي')           // Alef Maksura -> Ya
     .replace(/ة/g, 'ه')           // Ta Marbuta -> Ha
+    .replace(/[\(\)\-\–\—\_\/\,\،\.\"\']/g, ' ') // Punctuation to space
     .replace(/\s+/g, ' ')         // Multiple spaces -> single space
     .trim()
 }
 
-// دالة similarity بسيطة (Dice coefficient)
+// دالة similarity (Dice coefficient)
 export function similarity(s1, s2) {
   const n1 = normalizeArabic(s1).toLowerCase()
   const n2 = normalizeArabic(s2).toLowerCase()
 
+  if (!n1 || !n2) return 0
   if (n1 === n2) return 1
+  if (n1.includes(n2) || n2.includes(n1)) return 0.9
 
   const bigrams1 = new Set()
   const bigrams2 = new Set()

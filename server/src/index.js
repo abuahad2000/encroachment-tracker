@@ -134,25 +134,48 @@ app.get('/api/managers', (req, res) => {
   res.json(managers)
 })
 
-// Get layers (GeoJSON)
+// Get layers (GeoJSON) - Only ongoing active layers
 app.get('/api/layers', (req, res) => {
   const layers = loadGeneratedData('layers.json')
   if (!layers) {
     return res.json({
       type: 'FeatureCollection',
-      features: []
+      features: [],
+      stats: { water: 0, sanitation: 0, total: 0 }
     })
   }
 
-  // Merge water and sanitation layers
-  const allFeatures = [
-    ...(layers.water?.features || []),
-    ...(layers.sanitation?.features || [])
-  ]
+  const { sector } = req.query
+  const waterFeatures = (layers.water?.features || []).map(f => ({
+    ...f,
+    properties: { ...f.properties, sector: 'water' }
+  }))
+  const sanitationFeatures = (layers.sanitation?.features || []).map(f => ({
+    ...f,
+    properties: { ...f.properties, sector: 'sanitation' }
+  }))
+
+  const stats = {
+    water: waterFeatures.length,
+    sanitation: sanitationFeatures.length,
+    total: waterFeatures.length + sanitationFeatures.length
+  }
+
+  let selectedFeatures = []
+  if (sector === 'water') {
+    selectedFeatures = waterFeatures
+  } else if (sector === 'sanitation') {
+    selectedFeatures = sanitationFeatures
+  } else {
+    selectedFeatures = [...waterFeatures, ...sanitationFeatures]
+  }
 
   res.json({
     type: 'FeatureCollection',
-    features: allFeatures
+    features: selectedFeatures,
+    waterFeatures,
+    sanitationFeatures,
+    stats
   })
 })
 
