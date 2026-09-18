@@ -1,0 +1,47 @@
+# حزم ومخرجات البناء
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# إدارة الإصدارات
+.git/
+.svn/
+.hg/
+
+# الملفات البيئية والحساسة
+.env
+.env.*
+!.env.example
+
+# ملفات البيانات والخرائط الضخمة (لمنع استهلاك التوكن)
+*.kmz
+*.kml
+*.xlsx
+*.xls
+*.csv
+*.zip
+*.tar.gz
+*.rar
+*.7z
+KMZ/
+XLSX/
+
+# ملفات الوسائط
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.mp4
+*.pdf
+
+# ملفات الكاش والمحرر
+.vscode/
+.idea/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-white dark:bg-slate-950 text-slate-950 dark:text-white transition-colors;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white dark:bg-slate-900 rounded-xl shadow-apple hover:shadow-apple-lg transition-shadow p-6;
+  }
+
+  .btn-primary {
+    @apply px-6 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-2 bg-slate-200 dark:bg-slate-700 text-slate-950 dark:text-white rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium;
+  }
+
+  .status-badge {
+    @apply inline-block px-3 py-1 rounded-full text-xs font-medium;
+  }
+}

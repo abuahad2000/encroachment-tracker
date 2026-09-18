@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(grep -oE '^[^:]+:.*\\\\| `\\(3712|806|17844|883\\)` \\\\|' 'C:\\\\Users\\\\USER\\\\.claude\\\\projects\\\\c--antigravity-files-IDE-encroachment-tracker\\\\578eb4d5-69b0-44a4-bea7-16840aba93a5\\\\tool-results\\\\toolu_01Ht9abo8u5f3aYRNXG7WPEA.txt')",
+      "Bash(sed -E 's/\\(NWC_Projects[^:]+\\):.*/\\\\1/')",
+      "Bash(awk -F'\\\\t' '{print $1}')",
+      "Bash(awk '$1>1')",
+      "Bash(python3)"
+    ]
+  }
+}
