@@ -12,32 +12,33 @@
     "railway-build": "npm install && npm run build-data && npm run build"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "xlsx": "^0.18.5",
-    "jszip": "^3.10.1",
-    "@turf/turf": "^6.5.0",
-    "string-similarity": "^4.0.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
-    "leaflet": "^1.9.4",
-    "react-leaflet": "^4.2.1",
     "@tanstack/react-table": "^8.13.2",
+    "@turf/turf": "^6.5.0",
+    "clsx": "^2.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
     "html-to-image": "^1.11.6",
     "jspdf": "^2.5.1",
-    "zustand": "^4.4.1",
-    "clsx": "^2.0.0"
+    "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
+    "multer": "^1.4.5-lts.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
+    "react-router-dom": "^6.20.0",
+    "string-similarity": "^4.0.4",
+    "xlsx": "^0.18.5",
+    "zustand": "^4.4.1"
   },
   "devDependencies": {
-    "vite": "^5.0.8",
-    "@vitejs/plugin-react": "^4.2.1",
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8.4.32",
-    "autoprefixer": "^10.4.17",
-    "typescript": "^5.3.3",
+    "@types/express": "^4.17.21",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
-    "@types/express": "^4.17.21"
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
   }
 }

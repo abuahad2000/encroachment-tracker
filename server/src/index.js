@@ -5,9 +5,41 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import multer from 'multer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const execAsync = promisify(exec)
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads')
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true })
+    }
+    cb(null, uploadDir)
+  },
+  filename: (req, file, cb) => {
+    // Save with original name (will replace old file)
+    cb(null, 'reports.xlsx')
+  }
+})
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    // Only allow Excel files
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.mimetype === 'application/vnd.ms-excel' ||
+        file.originalname.endsWith('.xlsx') ||
+        file.originalname.endsWith('.xls')) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only Excel files are allowed'))
+    }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+})
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -91,6 +123,43 @@ app.get('/api/layers', (req, res) => {
     type: 'FeatureCollection',
     features: allFeatures
   })
+})
+
+// Upload new reports file
+app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    const uploadedPath = req.file.path
+    const xlsxDir = path.join(__dirname, '../../XLSX')
+    const targetPath = path.join(xlsxDir, 'بلاغات تعدي مقاولي شركة المياه الوطنية 12 سبتمبر.xlsx')
+
+    // Create XLSX directory if it doesn't exist
+    if (!fs.existsSync(xlsxDir)) {
+      fs.mkdirSync(xlsxDir, { recursive: true })
+    }
+
+    // Replace the old file with the new one
+    fs.copyFileSync(uploadedPath, targetPath)
+    fs.unlinkSync(uploadedPath) // Delete temp file
+
+    // Trigger data rebuild
+    console.log('📤 New reports file uploaded, rebuilding data...')
+    const buildScript = path.join(__dirname, 'pipeline/buildData.js')
+    await execAsync(`node ${buildScript}`)
+
+    res.json({
+      success: true,
+      message: 'File uploaded and data rebuilt successfully',
+      file: req.file.originalname,
+      timestamp: new Date().toISOString()
+    })
+  } catch (err) {
+    console.error('❌ Error uploading file:', err)
+    res.status(500).json({ error: 'Failed to upload file', details: err.message })
+  }
 })
 
 // Save override

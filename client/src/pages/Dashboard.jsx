@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import FileUpload from '../components/FileUpload'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    setLoading(true)
     fetch('/api/stats')
       .then(r => r.json())
       .then(d => {
@@ -15,7 +18,11 @@ export default function Dashboard() {
         console.error('Error loading stats:', e)
         setLoading(false)
       })
-  }, [])
+  }, [refreshKey])
+
+  const handleUploadSuccess = () => {
+    setRefreshKey(prev => prev + 1)
+  }
 
   if (loading) return <div className="text-center py-8">جاري التحميل...</div>
 
@@ -24,6 +31,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <h1 className="text-4xl font-bold">لوحة المراقبة</h1>
+
+      {/* File Upload Section */}
+      <FileUpload onSuccess={handleUploadSuccess} />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="card">
