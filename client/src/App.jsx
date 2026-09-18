@@ -6,6 +6,7 @@ import MapView from './pages/MapView'
 import ManagerCards from './pages/ManagerCards'
 import ManagerDetail from './pages/ManagerDetail'
 import WeeklyExport from './pages/WeeklyExport'
+import Contractors from './pages/Contractors'
 import DarkModeToggle from './components/DarkModeToggle'
 
 export default function App() {
@@ -34,9 +35,10 @@ export default function App() {
               <Link to="/" className="font-bold text-lg hover:text-blue-100">
                 📊 نظام التعديات
               </Link>
-              <div className="flex gap-4">
+              <div className="flex items-center gap-4">
                 <Link to="/" className="hover:text-blue-100 transition">لوحة رئيسية</Link>
                 <Link to="/reports" className="hover:text-blue-100 transition">البلاغات</Link>
+                <Link to="/contractors" className="hover:text-blue-100 transition">المقاولون</Link>
                 <Link to="/map" className="hover:text-blue-100 transition">الخريطة</Link>
                 <Link to="/managers" className="hover:text-blue-100 transition">المدراء</Link>
                 <Link to="/export" className="hover:text-blue-100 transition">التصدير</Link>
@@ -51,6 +53,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/reports" element={<ReportsTable />} />
+            <Route path="/contractors" element={<Contractors />} />
             <Route path="/map" element={<MapView />} />
             <Route path="/managers" element={<ManagerCards />} />
             <Route path="/managers/:managerId" element={<ManagerDetail />} />

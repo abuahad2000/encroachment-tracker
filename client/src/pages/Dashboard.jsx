@@ -35,25 +35,29 @@ export default function Dashboard() {
       {/* File Upload Section */}
       <FileUpload onSuccess={handleUploadSuccess} />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card">
-          <div className="text-gray-600 dark:text-gray-400 text-sm">إجمالي البلاغات النشطة</div>
-          <div className="text-3xl font-bold mt-2">{stats.totalActive || 0}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="card border-r-4 border-r-amber-500 hover:shadow-md transition">
+          <div className="text-gray-600 dark:text-gray-400 text-sm font-semibold">إجمالي البلاغات النشطة</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">المعلقة لجميع مدراء البرامج</div>
+          <div className="text-3xl font-extrabold mt-2 text-amber-600 dark:text-amber-400">{stats.totalActive || 0}</div>
         </div>
 
-        <div className="card">
-          <div className="text-gray-600 dark:text-gray-400 text-sm">المسندة بنجاح</div>
-          <div className="text-3xl font-bold mt-2 text-green-600">{stats.assignedCount || 0}</div>
+        <div className="card border-r-4 border-r-green-500 hover:shadow-md transition">
+          <div className="text-gray-600 dark:text-gray-400 text-sm font-semibold">المسندة بنجاح</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">التي تم ربطها بمدير برنامج ومقاول</div>
+          <div className="text-3xl font-extrabold mt-2 text-green-600 dark:text-green-400">{stats.assignedCount || 0}</div>
         </div>
 
-        <div className="card">
-          <div className="text-gray-600 dark:text-gray-400 text-sm">المستبعدة تلقائياً</div>
-          <div className="text-3xl font-bold mt-2 text-yellow-600">{stats.excludedCount || 0}</div>
+        <div className="card border-r-4 border-r-red-500 hover:shadow-md transition">
+          <div className="text-gray-600 dark:text-gray-400 text-sm font-semibold">المستبعدة من ملف البلاغات</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">خارج نطاق المشاريع الجارية أو تتبع التشغيل</div>
+          <div className="text-3xl font-extrabold mt-2 text-red-600 dark:text-red-400">{stats.excludedCount || 0}</div>
         </div>
 
-        <div className="card">
-          <div className="text-gray-600 dark:text-gray-400 text-sm">متوسط التأخير (أيام)</div>
-          <div className="text-3xl font-bold mt-2 text-red-600">{stats.avgDelay || 0}</div>
+        <div className="card border-r-4 border-r-blue-500 hover:shadow-md transition">
+          <div className="text-gray-600 dark:text-gray-400 text-sm font-semibold">متوسط التأخير</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">أيام منذ تسجيل البلاغ الميداني</div>
+          <div className="text-3xl font-extrabold mt-2 text-blue-600 dark:text-blue-400">{stats.avgDelay || 0} <span className="text-base font-normal">يوم</span></div>
         </div>
       </div>
 

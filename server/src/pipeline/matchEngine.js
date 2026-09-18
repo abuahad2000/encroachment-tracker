@@ -6,7 +6,7 @@ const MAINTENANCE_KEYWORDS = ['طارئ', 'انكسار', 'صيانة', 'دور�
 const ACTIVE_STATUSES = ['جاري', 'مسلم ابتدائي']
 
 // المقاولون المعتمدون لمشاريع م. عبدالله الأسود (تغطية كامل مدينة الرياض كاستثناء معتمد)
-const ABDULLAH_AL_ASWAD_CONTRACTORS = [
+export const DEFAULT_ASWAD_CONTRACTORS = [
   'مجموعة سعد علي العيسى للمقاولات',
   'سعد علي العيسى',
   'مؤسسة العرين للمقاولات',
@@ -139,7 +139,7 @@ function matchProjectToFeature(project, feat) {
   return true
 }
 
-export function matchReportToProject(report, activeProjects, prelinkedProjects) {
+export function matchReportToProject(report, activeProjects, contractorsConfig) {
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
   // قاعدة المقاول "الأعمال المدنية": إذا لم يتطابق الحي مع المشروع الجاري يجعله مستبعداً فوراً
@@ -218,7 +218,13 @@ export function matchReportToProject(report, activeProjects, prelinkedProjects) 
         if (contractorMatched) {
           // استثناء مشاريع م. عبدالله الأسود (تغطية شاملة لمدينة الرياض)
           const isAswadProject = (project.subProgram === 'المتفرقات' || (project.programManager && project.programManager.includes('عبدالله الأسود')))
-          const isAswadContractor = matchContractor(report.contractorName, ABDULLAH_AL_ASWAD_CONTRACTORS)
+          const effectiveAswadContractors = [
+            ...DEFAULT_ASWAD_CONTRACTORS,
+            ...(contractorsConfig?.customContractors || [])
+              .filter(c => c.isAswadException)
+              .map(c => c.name)
+          ]
+          const isAswadContractor = matchContractor(report.contractorName, effectiveAswadContractors)
 
           if (isAswadProject && isAswadContractor) {
             confidence = Math.max(confidence, 0.85)
@@ -336,7 +342,7 @@ export function getProjectSector(project) {
   return 'صرف'
 }
 
-export function processReports(reports, projects, geoJsonData, overrides) {
+export function processReports(reports, projects, geoJsonData, overrides, contractorsConfig) {
   const processed = []
 
   // تصفية المشاريع النشطة
@@ -382,7 +388,7 @@ export function processReports(reports, projects, geoJsonData, overrides) {
         isMaintenance
       }
     } else {
-      const match = matchReportToProject(report, activeProjects)
+      const match = matchReportToProject(report, activeProjects, contractorsConfig)
       result = {
         ...report,
         ...match,

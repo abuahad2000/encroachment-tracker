@@ -25,16 +25,30 @@ export async function buildData() {
     const geoJsonData = await parseAllKMZ()
     console.log('   ✓ تم قراءة ملفات KMZ')
 
-    // 2. Load overrides
+    // 2. Load overrides & contractors config
     const overridesPath = path.join(__dirname, '../../data/overrides.json')
     let overrides = []
     if (fs.existsSync(overridesPath)) {
-      overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+      try {
+        overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+      } catch (e) {
+        overrides = []
+      }
+    }
+
+    const contractorsPath = path.join(__dirname, '../../data/contractors.json')
+    let contractorsConfig = { customContractors: [], aliases: {} }
+    if (fs.existsSync(contractorsPath)) {
+      try {
+        contractorsConfig = JSON.parse(fs.readFileSync(contractorsPath, 'utf-8'))
+      } catch (e) {
+        contractorsConfig = { customContractors: [], aliases: {} }
+      }
     }
 
     // 3. Process reports
     console.log('⚙️  جاري معالجة ومطابقة البلاغات...')
-    const processedReports = processReports(reports, projects, geoJsonData, overrides)
+    const processedReports = processReports(reports, projects, geoJsonData, overrides, contractorsConfig)
 
     // 4. Calculate statistics
     const stats = calculateStats(processedReports, projects)
@@ -92,16 +106,18 @@ export async function buildData() {
 }
 
 function calculateStats(reports, projects) {
-  // البلاغات المطابقة فقط (مع مشروع)
-  const matched = reports.filter(r => r.matched && !r.archived && !r.excluded)
-  const archived = reports.filter(r => r.archived)
-  const active = reports.filter(r => !r.archived && r.status !== 'تمت المعالجة')
+  // البلاغات المسندة بنجاح إلى مشروع ومدير برنامج
+  const assigned = reports.filter(r => r.matched && r.project && !r.excluded)
+  // إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (غير معالجة)
+  const totalActive = assigned.filter(r => r.status !== 'تمت المعالجة')
+  // التي تمت معالجتها
+  const processed = assigned.filter(r => r.status === 'تمت المعالجة')
+  // المستبعدة من ملف البلاغات
+  const excluded = reports.filter(r => r.excluded)
 
-  // إحصائيات البلاغات المطابقة
-  const processed = archived.filter(r => r.matched)
-  const underProcessing = matched.filter(r => r.status === 'تحت معالجة المقاول')
+  const underProcessing = assigned.filter(r => r.status === 'تحت معالجة المقاول')
 
-  const ageDays = matched
+  const ageDays = totalActive
     .filter(r => r.ageDays >= 0)
     .map(r => r.ageDays)
     .sort((a, b) => a - b)
@@ -112,7 +128,7 @@ function calculateStats(reports, projects) {
   }
 
   const topManagers = {}
-  for (const r of matched) {
+  for (const r of totalActive) {
     if (r.project?.programManager) {
       topManagers[r.project.programManager] = (topManagers[r.project.programManager] || 0) + 1
     }
@@ -120,10 +136,13 @@ function calculateStats(reports, projects) {
 
   return {
     totalReports: reports.length,
-    matchedReports: matched.length,
+    totalActive: totalActive.length,
+    assignedCount: assigned.length,
+    excludedCount: excluded.length,
+    matchedReports: totalActive.length,
     processedCount: processed.length,
     underProcessingCount: underProcessing.length,
-    archivedCount: archived.length,
+    archivedCount: processed.length,
     avgDelay: ageDays.length > 0 ? Math.round(ageDays.reduce((a, b) => a + b) / ageDays.length) : 0,
     medianDelay: ageDays.length > 0 ? ageDays[Math.floor(ageDays.length / 2)] : 0,
     maxDelay: ageDays.length > 0 ? Math.max(...ageDays) : 0,

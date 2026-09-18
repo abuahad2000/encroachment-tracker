@@ -305,17 +305,182 @@ app.post('/api/override', (req, res) => {
 app.post('/api/refresh-data', async (req, res) => {
   try {
     console.log('🔄 Starting data refresh...')
-
-    // Run build-data script
-    const buildScript = path.join(__dirname, 'pipeline/buildData.js')
-    await execAsync(`node ${buildScript}`)
-
+    const result = await buildData()
     console.log('✅ Data refresh completed')
-    res.json({ success: true, message: 'Data refreshed successfully' })
+    res.json({ success: true, message: 'تم تحديث البيانات بنجاح', stats: result?.stats })
   } catch (err) {
     console.error('❌ Error refreshing data:', err)
     res.status(500).json({ error: 'Failed to refresh data', details: err.message })
   }
+})
+
+// Contractors registry file path
+const contractorsConfigPath = path.join(__dirname, '../data/contractors.json')
+
+function loadContractorsConfig() {
+  if (fs.existsSync(contractorsConfigPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(contractorsConfigPath, 'utf-8'))
+    } catch (e) {
+      console.error('Error loading contractors config:', e)
+    }
+  }
+  return { customContractors: [], aliases: {} }
+}
+
+function saveContractorsConfig(data) {
+  const dir = path.dirname(contractorsConfigPath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(contractorsConfigPath, JSON.stringify(data, null, 2))
+}
+
+// Get full contractors analysis and registry
+app.get('/api/contractors', (req, res) => {
+  const projects = loadGeneratedData('projects.json') || []
+  const reports = loadGeneratedData('reports.json') || []
+  const config = loadContractorsConfig()
+
+  // Map contractors from projects
+  const contractorsMap = {}
+
+  // 1. Seed from projects
+  projects.forEach(p => {
+    const cName = (p.contractor || '').trim()
+    if (!cName || cName === '-' || cName === 'غير محدد') return
+    if (!contractorsMap[cName]) {
+      contractorsMap[cName] = {
+        name: cName,
+        source: 'excel_projects',
+        projects: [],
+        programManagers: new Set(),
+        sectors: new Set(),
+        districts: new Set(),
+        reportsCount: 0,
+        activeReportsCount: 0,
+        processedReportsCount: 0,
+        isAswadException: false,
+        aliases: []
+      }
+    }
+    contractorsMap[cName].projects.push({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      scope: p.scope,
+      manager: p.programManager
+    })
+    if (p.programManager) contractorsMap[cName].programManagers.add(p.programManager)
+    const sec = (p.name.includes('مياه') || (p.subProgram || '').includes('مياه')) ? 'مياه' : 'صرف'
+    contractorsMap[cName].sectors.add(sec)
+    if (p.scope) contractorsMap[cName].districts.add(p.scope)
+  })
+
+  // 2. Add custom added contractors from config
+  ;(config.customContractors || []).forEach(custom => {
+    if (!contractorsMap[custom.name]) {
+      contractorsMap[custom.name] = {
+        name: custom.name,
+        source: 'custom_added',
+        projects: [],
+        programManagers: new Set(custom.programManagers || []),
+        sectors: new Set(custom.sectors || []),
+        districts: new Set(custom.districts || []),
+        reportsCount: 0,
+        activeReportsCount: 0,
+        processedReportsCount: 0,
+        isAswadException: !!custom.isAswadException,
+        aliases: custom.aliases || []
+      }
+    } else {
+      if (custom.isAswadException) contractorsMap[custom.name].isAswadException = true
+      if (custom.aliases) contractorsMap[custom.name].aliases = custom.aliases
+    }
+  })
+
+  // 3. Aggregate reports stats for each contractor
+  reports.forEach(r => {
+    if (r.excluded) return
+    const cName = r.contractorName || r.project?.contractor
+    if (cName && contractorsMap[cName]) {
+      contractorsMap[cName].reportsCount++
+      if (r.status === 'تمت المعالجة') {
+        contractorsMap[cName].processedReportsCount++
+      } else {
+        contractorsMap[cName].activeReportsCount++
+      }
+    }
+  })
+
+  // Convert Sets to Arrays
+  const list = Object.values(contractorsMap).map(c => ({
+    ...c,
+    programManagers: Array.from(c.programManagers),
+    sectors: Array.from(c.sectors),
+    districts: Array.from(c.districts),
+    projectsCount: c.projects.length
+  })).sort((a, b) => b.activeReportsCount - a.activeReportsCount || a.name.localeCompare(b.name, 'ar'))
+
+  res.json({
+    contractors: list,
+    total: list.length,
+    customCount: (config.customContractors || []).length,
+    aliases: config.aliases || {}
+  })
+})
+
+// Add or update contractor
+app.post('/api/contractors', async (req, res) => {
+  const { name, programManagers, sectors, districts, isAswadException, aliases } = req.body
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'اسم المقاول مطلوب' })
+  }
+
+  const trimmedName = name.trim()
+  const config = loadContractorsConfig()
+
+  const existingIdx = config.customContractors.findIndex(c => c.name === trimmedName)
+  const item = {
+    name: trimmedName,
+    programManagers: programManagers || [],
+    sectors: sectors || [],
+    districts: districts || [],
+    isAswadException: !!isAswadException,
+    aliases: aliases || [],
+    updatedAt: new Date().toISOString()
+  }
+
+  if (existingIdx >= 0) {
+    config.customContractors[existingIdx] = item
+  } else {
+    config.customContractors.push(item)
+  }
+
+  saveContractorsConfig(config)
+
+  // Re-run pipeline to immediately re-analyze reports with the new contractor rules
+  try {
+    await buildData()
+  } catch (e) {
+    console.warn('Pipeline rebuild warning:', e.message)
+  }
+
+  res.json({ success: true, contractor: item, message: 'تم حفظ المقاول وإعادة تحليل البلاغات' })
+})
+
+// Delete custom contractor
+app.delete('/api/contractors/:name', async (req, res) => {
+  const name = decodeURIComponent(req.params.name)
+  const config = loadContractorsConfig()
+  config.customContractors = config.customContractors.filter(c => c.name !== name)
+  saveContractorsConfig(config)
+
+  try {
+    await buildData()
+  } catch (e) {
+    console.warn('Pipeline rebuild warning:', e.message)
+  }
+
+  res.json({ success: true, message: 'تم حذف المقاول وإعادة تحليل البلاغات' })
 })
 
 // Health check
