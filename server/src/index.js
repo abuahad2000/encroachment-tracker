@@ -45,12 +45,43 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const NODE_ENV = process.env.NODE_ENV || 'development'
 
+// Debug paths
+console.log('🔍 Debugging paths:')
+console.log('  __dirname:', __dirname)
+console.log('  process.cwd():', process.cwd())
+
 // Middleware
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
   credentials: true
 }))
 app.use(express.json())
+
+// Serve static files from dist/ (built React app)
+const distPath = path.join(__dirname, '../../dist')
+const indexPath = path.join(distPath, 'index.html')
+
+console.log('  distPath:', distPath)
+console.log('  distPath exists?', fs.existsSync(distPath))
+console.log('  index.html exists?', fs.existsSync(indexPath))
+
+if (fs.existsSync(distPath)) {
+  // Serve index.html for the root path
+  app.get('/', (req, res) => {
+    const absolutePath = path.resolve(indexPath)
+    console.log(`📍 Serving root request, sending: ${absolutePath}`)
+    res.sendFile(absolutePath)
+  })
+
+  // Serve static files with proper index handling
+  app.use(express.static(distPath, {
+    index: false  // We handle index.html manually above
+  }))
+
+  console.log(`📁 Serving static files from dist/`)
+} else {
+  console.warn(`⚠️  dist/ folder not found at: ${distPath}`)
+}
 
 // Utility to load generated data
 function loadGeneratedData(file) {
@@ -213,8 +244,24 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
+// SPA Fallback Route - serve index.html for all non-API routes
+// This allows React Router to handle client-side routing
+app.get('*', (req, res) => {
+  const fallbackIndexPath = path.join(distPath, 'index.html')
+  if (fs.existsSync(fallbackIndexPath)) {
+    res.sendFile(path.resolve(fallbackIndexPath))
+  } else {
+    res.status(404).json({
+      error: 'Not Found',
+      message: 'Frontend build not found. Run "npm run build" first.',
+      hint: 'npm run build'
+    })
+  }
+})
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`)
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api/*`)
+  console.log(`🌐 Frontend available at http://localhost:${PORT}/`)
 })
