@@ -383,7 +383,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
 
   for (const report of reports) {
     const isMaintenance = isMaintenanceReport(report)
-    const override = overrides?.find(o => o.reportId === report.id)
+    const override = overrides?.find(o => String(o.reportId) === String(report.id))
 
     let result
     if (override?.excluded) {
@@ -396,7 +396,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         isMaintenance
       }
     } else if (override?.projectId) {
-      const proj = projects.find(p => p.id === override.projectId)
+      const proj = projects.find(p => String(p.id) === String(override.projectId))
       result = {
         ...report,
         matched: !!proj,
@@ -411,6 +411,13 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         ...report,
         ...match,
         isMaintenance
+      }
+    }
+
+    if (override?.customProgramManager && result.project) {
+      result.project = {
+        ...result.project,
+        programManager: override.customProgramManager
       }
     }
 

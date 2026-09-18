@@ -223,7 +223,7 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
 // Save override
 app.post('/api/override', (req, res) => {
-  const { reportId, projectId, excluded, reason, customContractor } = req.body
+  const { reportId, projectId, excluded, reason, customContractor, customProgramManager } = req.body
 
   const overridesPath = path.join(__dirname, '../data/overrides.json')
   let overrides = []
@@ -237,13 +237,14 @@ app.post('/api/override', (req, res) => {
   }
 
   // Find existing or create new
-  const existingIndex = overrides.findIndex(o => o.reportId === reportId)
+  const existingIndex = overrides.findIndex(o => String(o.reportId) === String(reportId))
   const entry = existingIndex >= 0 ? { ...overrides[existingIndex] } : { reportId }
 
   if (projectId !== undefined) entry.projectId = projectId || null
   if (excluded !== undefined) entry.excluded = !!excluded
   if (reason !== undefined) entry.reason = reason
   if (customContractor !== undefined) entry.customContractor = customContractor
+  if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
 
   entry.timestamp = new Date().toISOString()
 
