@@ -475,18 +475,28 @@ export default function ReportsTable() {
             </div>
 
             <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-3 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-gray-200 dark:border-gray-700">
                 <div>
                   <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">الحي والمدينة</label>
                   <p className="font-bold text-gray-800 dark:text-gray-200">{selectedReport.district || selectedReport.city}</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">القطاع</label>
-                  <p className="font-bold text-blue-600">{selectedReport.sector || 'صرف'}</p>
+                  <p className={`font-bold ${selectedReport.sector === 'مياه' ? 'text-blue-600' : 'text-teal-600'}`}>
+                    {selectedReport.sector === 'مياه' ? '💧 مياه' : '🚰 صرف'}
+                  </p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">حالة البلاغ</label>
-                  <p className="font-bold text-amber-600">{selectedReport.status}</p>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">رقم الرخصة</label>
+                  <p className="font-bold font-mono text-gray-900 dark:text-white">
+                    {selectedReport.licenseNumber || 'لا يوجد'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">المقاول في البلاغ</label>
+                  <p className="font-bold text-gray-900 dark:text-white truncate" title={selectedReport.contractorName || 'غير مسجل'}>
+                    {selectedReport.contractorName || 'غير مسجل'}
+                  </p>
                 </div>
               </div>
 

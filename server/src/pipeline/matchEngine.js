@@ -342,6 +342,24 @@ export function getProjectSector(project) {
   return 'صرف'
 }
 
+export function classifyReportSectorFromText(report) {
+  const fullText = ((report.description || '') + ' ' + (report.impact || '') + ' ' + (report.centerComment || '')).toLowerCase()
+  // تنظيف اسم الشركة المتكرر لتفادي تزييف نتيجة المياه
+  const cleanText = fullText.replace(/شركة المياه الوطنية/g, '').replace(/شركه المياه الوطنيه/g, '')
+
+  const hasSewer = /صرف|صحي|مجاري|مجرور|محطة معالجة|بيارة|بياره|خط طرد|غرفة تفتيش|منهل|مناهل/.test(cleanText)
+  const hasWater = /مياه|شبكة مياه|شبكه مياه|عداد|تسريب|انكسار|انبوب|توصيلة|توصيله|بئر|محبس|خزان/.test(cleanText)
+
+  if (hasSewer && !hasWater) return 'صرف'
+  if (hasWater && !hasSewer) return 'مياه'
+  if (hasSewer && hasWater) {
+    const sewerIdx = cleanText.search(/صرف|صحي/)
+    const waterIdx = cleanText.search(/مياه|عداد/)
+    return sewerIdx < waterIdx ? 'صرف' : 'مياه'
+  }
+  return 'مياه'
+}
+
 export function processReports(reports, projects, geoJsonData, overrides, contractorsConfig) {
   const processed = []
 
@@ -401,8 +419,12 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.customContractor = override.customContractor
     }
 
-    // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند
-    result.sector = getProjectSector(result.project)
+    // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند، أو من واقع نصوص البلاغ إذا كان مستبعداً
+    if (result.project) {
+      result.sector = getProjectSector(result.project)
+    } else {
+      result.sector = classifyReportSectorFromText(report)
+    }
 
     if (report.status === 'تمت المعالجة') {
       result.archived = true
