@@ -392,7 +392,7 @@ export default function WeeklyExport() {
         {/* Footer */}
         <div className="text-center text-xs text-gray-500 pt-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-2 font-semibold">
           <span>نظام إدارة وتتبع التعديات الجغرافية • شركة المياه الوطنية</span>
-          <span>تقرير صادر آلياً وفق قواعد المطابقة المكانية والتعاقدية الصارمة</span>
+          <span className="font-bold text-gray-700">إعداد: عبدالله بن عمر الزغيبي</span>
         </div>
       </div>
     </div>
