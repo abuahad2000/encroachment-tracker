@@ -74,7 +74,10 @@ export default function ReportsTable() {
 
   const openEditModal = (report) => {
     setEditReport(report)
-    setContractorInput(report.contractorName || report.project?.contractor || '')
+    const initialContractor = (report.contractorName && report.contractorName !== 'NULL')
+      ? report.contractorName
+      : (report.project?.contractor || '')
+    setContractorInput(initialContractor)
     setManagerInput(report.project?.programManager || '')
     setProjectInput(report.project?.id || '')
   }
@@ -98,8 +101,8 @@ export default function ReportsTable() {
       })
 
       if (res.ok) {
-        const selectedProj = projects.find(p => String(p.id) === String(projectInput)) || editReport.project
-        const newSector = (selectedProj?.name?.includes('مياه') || selectedProj?.subProgram?.includes('مياه')) ? 'مياه' : 'صرف'
+        const selectedProj = projectInput ? projects.find(p => String(p.id) === String(projectInput)) : editReport.project
+        const newSector = selectedProj ? ((selectedProj?.name?.includes('مياه') || selectedProj?.subProgram?.includes('مياه')) ? 'مياه' : 'صرف') : editReport.sector
 
         setReports(reports.map(r => {
           if (r.id === editReport.id) {
@@ -379,17 +382,20 @@ export default function ReportsTable() {
                         )}
                       </td>
 
-                      {/* المقاول مع زر التعديل في سطر واحد: للبلاغات المستبعدة لا تظهر المقاول أمام رقم البلاغ بالجدول */}
+                      {/* المقاول مع زر التعديل في سطر واحد: للبلاغات المستبعدة يظهر مقاول المشروع الأصلي بالملف مع إمكانية التعديل */}
                       <td className="px-3 py-3">
                         {r.excluded ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">
-                              مستبعد (غير مسند لمقاول)
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`font-semibold ${(!r.contractorName || r.contractorName === 'NULL') ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
+                              {r.contractorName && r.contractorName !== 'NULL' ? r.contractorName : 'غير محدد بالملف'}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold whitespace-nowrap">
+                              (مقاول المشروع الأصلي)
                             </span>
                             <button
                               onClick={() => openEditModal(r)}
-                              title="إسناد وتصحيح المقاول ومدير البرنامج"
-                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition"
+                              title="تعديل مقاول المشروع الأصلي أو إسناده"
+                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition text-xs"
                             >
                               ✏️
                             </button>
@@ -493,9 +499,11 @@ export default function ReportsTable() {
                   </p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">المقاول في البلاغ</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    {selectedReport.excluded ? 'مقاول المشروع الأصلي بالملف' : 'المقاول في البلاغ'}
+                  </label>
                   <p className="font-bold text-gray-900 dark:text-white truncate" title={selectedReport.contractorName || 'غير مسجل'}>
-                    {selectedReport.contractorName || 'غير مسجل'}
+                    {selectedReport.contractorName && selectedReport.contractorName !== 'NULL' ? selectedReport.contractorName : 'غير مسجل'}
                   </p>
                 </div>
               </div>
@@ -516,7 +524,7 @@ export default function ReportsTable() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-red-200/60 dark:border-red-800/60 text-gray-600 dark:text-gray-400">
                     <div>
-                      <strong>المقاول في ملف البلاغ الأصلي:</strong> {selectedReport.contractorName || 'غير مسجل'}
+                      <strong>مقاول المشروع الأصلي بالملف:</strong> {selectedReport.contractorName && selectedReport.contractorName !== 'NULL' ? selectedReport.contractorName : 'غير مسجل'}
                     </div>
                     <div>
                       <strong>حالة الإسناد:</strong> <span className="text-red-600 font-bold">غير مرتبط بمشروع رأسمالي</span>
@@ -570,44 +578,75 @@ export default function ReportsTable() {
             </p>
 
             <div className="space-y-4">
-              {/* 1. قائمة المقاولين المنسدلة من ملف الإكسيل */}
+              {/* 1. اسم المقاول مع إمكانية التعديل المباشر أو الاختيار من القائمة */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  اسم المقاول (من مشاريع الإكسيل)
-                </label>
-                <select
-                  value={contractorInput}
-                  onChange={e => setContractorInput(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none mb-2"
-                >
-                  <option value="">— بدون مقاول (فارغ) —</option>
-                  {editReport.project?.contractor && (
-                    <option value={editReport.project.contractor}>
-                      ⭐ مقاول المشروع الحالي: {editReport.project.contractor}
-                    </option>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    اسم المقاول (مقاول المشروع)
+                  </label>
+                  {editReport.excluded && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold">
+                      مقاول المشروع الأصلي بالملف
+                    </span>
                   )}
-                  <optgroup label="كافة مقاولي المشاريع بملف الإكسيل:">
-                    {projectContractors.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </optgroup>
-                </select>
+                </div>
 
-                <div className="flex gap-2">
+                <div className="space-y-2 mb-2">
+                  <input
+                    type="text"
+                    value={contractorInput}
+                    onChange={e => setContractorInput(e.target.value)}
+                    placeholder="اكتب اسم المقاول أو عدّله مباشرة هنا..."
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
+                  />
+                  <select
+                    value={contractorInput}
+                    onChange={e => setContractorInput(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="">— أو اختر من قائمة مقاولي المشاريع بالإكسيل —</option>
+                    {editReport.contractorName && editReport.contractorName !== 'NULL' && (
+                      <option value={editReport.contractorName}>
+                        ⭐ مقاول المشروع الأصلي بالملف: {editReport.contractorName}
+                      </option>
+                    )}
+                    {editReport.project?.contractor && editReport.project.contractor !== editReport.contractorName && (
+                      <option value={editReport.project.contractor}>
+                        ⭐ مقاول المشروع الحالي: {editReport.project.contractor}
+                      </option>
+                    )}
+                    <optgroup label="كافة مقاولي المشاريع بملف الإكسيل:">
+                      {projectContractors.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setContractorInput('')}
-                    className="px-2.5 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200"
+                    className="px-2.5 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 transition"
                   >
                     تفريغ المقاول
                   </button>
-                  {editReport.project?.contractor && (
+                  {editReport.contractorName && editReport.contractorName !== 'NULL' && (
+                    <button
+                      type="button"
+                      onClick={() => setContractorInput(editReport.contractorName)}
+                      className="px-2.5 py-1 text-xs bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-100 border border-amber-200 dark:border-amber-800 font-semibold transition"
+                    >
+                      مقاول المشروع الأصلي بالملف
+                    </button>
+                  )}
+                  {editReport.project?.contractor && editReport.project.contractor !== editReport.contractorName && (
                     <button
                       type="button"
                       onClick={() => setContractorInput(editReport.project.contractor)}
-                      className="px-2.5 py-1 text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100"
+                      className="px-2.5 py-1 text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 transition"
                     >
-                      مقاول المشروع الأصلي
+                      مقاول المشروع المسند
                     </button>
                   )}
                 </div>
