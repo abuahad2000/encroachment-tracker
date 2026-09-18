@@ -327,6 +327,15 @@ export function matchReportToProject(report, activeProjects, prelinkedProjects) 
   }
 }
 
+export function getProjectSector(project) {
+  if (!project) return 'غير محدد'
+  const name = project.name || ''
+  const sub = project.subProgram || ''
+  if (name.includes('صرف') || name.includes('معالجة') || sub.includes('صرف')) return 'صرف'
+  if (name.includes('مياه') || sub.includes('مياه')) return 'مياه'
+  return 'صرف'
+}
+
 export function processReports(reports, projects, geoJsonData, overrides) {
   const processed = []
 
@@ -385,6 +394,9 @@ export function processReports(reports, projects, geoJsonData, overrides) {
       result.contractorName = override.customContractor
       result.customContractor = override.customContractor
     }
+
+    // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند
+    result.sector = getProjectSector(result.project)
 
     if (report.status === 'تمت المعالجة') {
       result.archived = true

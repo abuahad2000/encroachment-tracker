@@ -13,13 +13,24 @@ export default function ManagerDetail() {
   const [editContractorReport, setEditContractorReport] = useState(null)
   const [contractorInput, setContractorInput] = useState('')
   const [savingContractor, setSavingContractor] = useState(false)
+  const [projectContractors, setProjectContractors] = useState([])
 
   useEffect(() => {
     Promise.all([
       fetch('/api/managers').then(r => r.json()),
-      fetch('/api/reports').then(r => r.json())
+      fetch('/api/reports').then(r => r.json()),
+      fetch('/api/projects').then(r => r.json()).catch(() => [])
     ])
-      .then(([managers, allReports]) => {
+      .then(([managers, allReports, projectsData]) => {
+        if (projectsData && Array.isArray(projectsData)) {
+          const contractors = Array.from(new Set(
+            projectsData
+              .map(p => (p.contractor || '').trim())
+              .filter(c => c && c.length > 2 && c !== 'غير محدد')
+          )).sort((a, b) => a.localeCompare(b, 'ar'))
+          setProjectContractors(contractors)
+        }
+
         const decodedId = decodeURIComponent(managerId).toLowerCase()
         const mgr = managers.find(m => 
           m.id === managerId || 
@@ -256,42 +267,53 @@ export default function ManagerDetail() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {displayedReports.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900/60 text-xs font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-900/60 font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="px-4 py-3">رقم البلاغ</th>
-                  <th className="px-4 py-3">تاريخ البلاغ</th>
-                  <th className="px-4 py-3">الحي / المدينة</th>
-                  <th className="px-4 py-3">المشروع المسند</th>
-                  <th className="px-4 py-3">المقاول</th>
-                  <th className="px-4 py-3">حالة البلاغ</th>
-                  <th className="px-4 py-3">التأخير</th>
-                  <th className="px-4 py-3 text-center">الإجراءات</th>
+                  <th className="px-3 py-3 whitespace-nowrap">رقم البلاغ</th>
+                  <th className="px-3 py-3 whitespace-nowrap">القطاع</th>
+                  <th className="px-3 py-3 whitespace-nowrap">تاريخ البلاغ</th>
+                  <th className="px-3 py-3 whitespace-nowrap">الحي / المدينة</th>
+                  <th className="px-3 py-3">المشروع المسند</th>
+                  <th className="px-3 py-3 whitespace-nowrap">المقاول</th>
+                  <th className="px-3 py-3 whitespace-nowrap">حالة البلاغ</th>
+                  <th className="px-3 py-3 whitespace-nowrap">التأخير</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {displayedReports.map(r => {
                   const isProcessed = r.status === 'تمت المعالجة'
                   const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
+                  const sector = r.sector || ((r.project?.name || '').includes('صرف') ? 'صرف' : 'مياه')
 
                   return (
                     <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition">
-                      <td className="px-4 py-3 font-bold text-primary-600 dark:text-primary-400">
+                      <td className="px-3 py-2.5 font-bold text-gray-900 dark:text-white whitespace-nowrap font-mono">
                         {r.id}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                          sector === 'مياه'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                            : 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300'
+                        }`}>
+                          {sector === 'مياه' ? '💧 مياه' : '🚰 صرف'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
                         {r.dateReport || r.dateIncident || '-'}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="font-semibold text-gray-900 dark:text-white block">{r.district || r.city}</span>
-                        {r.street && <span className="text-xs text-gray-400 block">{r.street}</span>}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-semibold text-gray-900 dark:text-white">{r.district || r.city}</span>
+                        {r.street && <span className="text-[11px] text-gray-400 mr-1.5">({r.street})</span>}
                       </td>
-                      <td className="px-4 py-3 max-w-xs">
+                      <td className="px-3 py-2.5 max-w-[280px]">
                         <span className="font-medium text-gray-900 dark:text-gray-200 block truncate" title={r.project?.name}>
                           {r.project?.name}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                             {effectiveContractor}
@@ -308,8 +330,8 @@ export default function ManagerDetail() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                           isProcessed
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
@@ -317,8 +339,8 @@ export default function ManagerDetail() {
                           {r.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                           r.ageDays > 60 ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
                           r.ageDays > 30 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' :
                           'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
@@ -326,17 +348,17 @@ export default function ManagerDetail() {
                           {r.ageDays} يوم
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <button
                           onClick={() => { setSelectedReport(r); setShowDetails(true); }}
-                          className="px-2.5 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded-lg transition"
+                          className="px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded-lg transition"
                         >
                           التفاصيل
                         </button>
                         {!isProcessed && (
                           <button
                             onClick={() => handleExclude(r.id)}
-                            className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition mr-1"
+                            className="px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition mr-1"
                           >
                             استبعاد
                           </button>
@@ -363,7 +385,7 @@ export default function ManagerDetail() {
             <div className="flex justify-between items-start mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
               <div>
                 <span className="text-xs text-primary-600 dark:text-primary-400 font-semibold block">تفاصيل بلاغ التعدي</span>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">بلاغ رقم #{selectedReport.id}</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">بلاغ رقم {selectedReport.id}</h2>
               </div>
               <button
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg p-1"
@@ -445,16 +467,32 @@ export default function ManagerDetail() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              تعديل اسم المقاول للبلاغ #{editContractorReport.id}
+              تعديل اسم المقاول للبلاغ {editContractorReport.id}
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-              يمكنك كتابة اسم المقاول الفعلي أو تركه فارغاً مع بقاء البلاغ مرتبطاً بالمشروع ومدير البرنامج ({manager.name}).
+              يمكنك اختيار المقاول من قائمة مشاريع الإكسيل أو كتابته أو تركه فارغاً مع بقاء البلاغ مرتبطاً بالمشروع ومدير البرنامج ({manager.name}).
             </p>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  اسم المقاول
+                  اختر المقاول من قائمة مشاريع الإكسيل
+                </label>
+                <select
+                  value={projectContractors.includes(contractorInput) ? contractorInput : ''}
+                  onChange={e => {
+                    if (e.target.value) setContractorInput(e.target.value)
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white mb-2"
+                >
+                  <option value="">-- اختر من قائمة مقاولي المشاريع ({projectContractors.length} مقاول) --</option>
+                  {projectContractors.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  أو اكتب / عدّل اسم المقاول يدوياً
                 </label>
                 <input
                   type="text"

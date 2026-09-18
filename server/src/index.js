@@ -261,6 +261,24 @@ app.post('/api/override', (req, res) => {
           reports[rIdx].contractorName = customContractor
           reports[rIdx].customContractor = customContractor
         }
+        if (projectId !== undefined) {
+          const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+          if (fs.existsSync(projectsPath)) {
+            const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
+            const proj = projects.find(p => String(p.id) === String(projectId))
+            if (proj) {
+              reports[rIdx].project = { ...proj }
+              reports[rIdx].matched = true
+              reports[rIdx].excluded = false
+              const name = proj.name || ''
+              const sub = proj.subProgram || ''
+              reports[rIdx].sector = (name.includes('مياه') || sub.includes('مياه')) ? 'مياه' : 'صرف'
+            }
+          }
+        }
+        if (req.body.customProgramManager && reports[rIdx].project) {
+          reports[rIdx].project.programManager = req.body.customProgramManager
+        }
         if (excluded !== undefined) {
           reports[rIdx].excluded = !!excluded
           if (excluded) {
