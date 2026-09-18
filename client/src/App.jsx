@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import ReportsTable from './pages/ReportsTable'
 import MapView from './pages/MapView'
 import ManagerCards from './pages/ManagerCards'
+import ManagerDetail from './pages/ManagerDetail'
 import WeeklyExport from './pages/WeeklyExport'
 import DarkModeToggle from './components/DarkModeToggle'
 
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/reports" element={<ReportsTable />} />
             <Route path="/map" element={<MapView />} />
             <Route path="/managers" element={<ManagerCards />} />
+            <Route path="/managers/:managerId" element={<ManagerDetail />} />
             <Route path="/export" element={<WeeklyExport />} />
           </Routes>
         </main>

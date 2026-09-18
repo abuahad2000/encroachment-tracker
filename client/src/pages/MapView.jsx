@@ -27,32 +27,49 @@ export default function MapView() {
 
   if (loading) return <div className="text-center py-8">جاري تحميل الخريطة...</div>
 
+  const onEachFeature = (feature, layer) => {
+    const popupContent = `<div style="direction: rtl; text-align: right;">
+      <strong>${feature.properties.name || 'بدون اسم'}</strong>
+      <br/>${feature.properties.description || ''}
+    </div>`
+    layer.bindPopup(popupContent)
+  }
+
+  const getFeatureStyle = (feature) => {
+    if (feature.geometry.type === 'Point') return {}
+
+    const color = feature.properties.color || '#0066cc'
+    return {
+      color: color,
+      weight: 2,
+      opacity: 0.7,
+      fillOpacity: 0.3,
+      fillColor: color
+    }
+  }
+
   return (
     <div>
       <h1 className="text-3xl font-bold mb-6">الخريطة التفاعلية</h1>
 
       <div style={{ height: '600px', borderRadius: '12px', overflow: 'hidden' }} className="shadow-lg">
-        {geoData ? (
+        {geoData && geoData.features?.length > 0 ? (
           <MapContainer center={[24.7, 46.7]} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; OpenStreetMap'
             />
-            {geoData.features && geoData.features.map((feature, i) => {
-              if (feature.geometry.type === 'Point') {
-                const [lng, lat] = feature.geometry.coordinates
-                return (
-                  <Marker key={i} position={[lat, lng]} icon={defaultIcon}>
-                    <Popup>{feature.properties.name}</Popup>
-                  </Marker>
-                )
-              }
-              return null
-            })}
+            <GeoJSON
+              data={geoData}
+              onEachFeature={onEachFeature}
+              style={getFeatureStyle}
+              pointToLayer={(feature, latlng) => <Marker position={latlng} icon={defaultIcon} />}
+            />
           </MapContainer>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-600">
-            لا توجد بيانات خريطة
+          <div className="flex items-center justify-center h-full text-gray-600 flex-col gap-4">
+            <div>لا توجد بيانات خريطة</div>
+            {!loading && <p className="text-sm text-gray-500">تأكد من تشغيل build-data</p>}
           </div>
         )}
       </div>
