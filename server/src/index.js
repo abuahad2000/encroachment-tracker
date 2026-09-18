@@ -397,10 +397,10 @@ app.get('/api/contractors', (req, res) => {
     }
   })
 
-  // 3. Aggregate reports stats for each contractor
+  // 3. Aggregate reports stats for each contractor (only if matched to a project and program manager)
   reports.forEach(r => {
-    if (r.excluded) return
-    const cName = r.contractorName || r.project?.contractor
+    if (r.excluded || !r.matched || !r.project || !r.project.programManager) return
+    const cName = r.contractorName || r.project.contractor
     if (cName && contractorsMap[cName]) {
       contractorsMap[cName].reportsCount++
       if (r.status === 'تمت المعالجة') {

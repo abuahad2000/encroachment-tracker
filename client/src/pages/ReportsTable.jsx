@@ -372,23 +372,42 @@ export default function ReportsTable() {
 
                       {/* مدير البرنامج في سطر واحد */}
                       <td className="px-3 py-3 font-semibold text-gray-800 dark:text-gray-200">
-                        {r.project?.programManager || '-'}
+                        {r.excluded ? (
+                          <span className="text-gray-400 text-[11px]">-</span>
+                        ) : (
+                          r.project?.programManager || '-'
+                        )}
                       </td>
 
-                      {/* المقاول مع زر التعديل في سطر واحد */}
+                      {/* المقاول مع زر التعديل في سطر واحد: للبلاغات المستبعدة لا تظهر المقاول أمام رقم البلاغ بالجدول */}
                       <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`font-semibold ${effectiveContractor === 'غير محدد' ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
-                            {effectiveContractor}
-                          </span>
-                          <button
-                            onClick={() => openEditModal(r)}
-                            title="تعديل المقاول ومدير البرنامج"
-                            className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition"
-                          >
-                            ✏️
-                          </button>
-                        </div>
+                        {r.excluded ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-400 dark:text-gray-500 italic text-[11px]">
+                              مستبعد (غير مسند لمقاول)
+                            </span>
+                            <button
+                              onClick={() => openEditModal(r)}
+                              title="إسناد وتصحيح المقاول ومدير البرنامج"
+                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`font-semibold ${effectiveContractor === 'غير محدد' ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
+                              {effectiveContractor}
+                            </span>
+                            <button
+                              onClick={() => openEditModal(r)}
+                              title="تعديل المقاول ومدير البرنامج"
+                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       {/* المصدر */}
@@ -478,7 +497,23 @@ export default function ReportsTable() {
                 </div>
               </div>
 
-              {selectedReport.project && (
+              {/* بطاقة تفاصيل المشروع والمقاول */}
+              {selectedReport.excluded ? (
+                <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-800 space-y-2">
+                  <div className="text-xs font-bold text-red-600 dark:text-red-400">حالة البلاغ: مستبعد من مشاريع البرامج الرأسمالية</div>
+                  <div className="text-xs text-gray-700 dark:text-gray-300">
+                    <strong>سبب الاستبعاد:</strong> {selectedReport.excludedReason || 'خارج نطاق المشاريع الجارية أو يتبع التشغيل والصيانة'}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-red-200/60 dark:border-red-800/60 text-gray-600 dark:text-gray-400">
+                    <div>
+                      <strong>المقاول في ملف البلاغ الأصلي:</strong> {selectedReport.contractorName || 'غير مسجل'}
+                    </div>
+                    <div>
+                      <strong>حالة الإسناد:</strong> <span className="text-red-600 font-bold">غير مرتبط بمشروع رأسمالي</span>
+                    </div>
+                  </div>
+                </div>
+              ) : selectedReport.project ? (
                 <div className="p-4 bg-gray-50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2">
                   <div className="text-xs font-bold text-gray-500">المشروع الرأسمالي المسند:</div>
                   <div className="font-bold text-gray-900 dark:text-white">{selectedReport.project.name}</div>
@@ -489,7 +524,7 @@ export default function ReportsTable() {
                     <div><strong>القطاع:</strong> {selectedReport.sector || 'صرف'}</div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
