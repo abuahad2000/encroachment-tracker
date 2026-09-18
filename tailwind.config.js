@@ -19,6 +19,10 @@ export default {
         apple: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
         'apple-lg': '0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23)',
       },
+      fontFamily: {
+        majalla: ['"Sakkal Majalla"', 'Majalla', 'Arial', 'sans-serif'],
+        sans: ['"Sakkal Majalla"', 'Majalla', 'Arial', 'sans-serif'],
+      },
       borderRadius: {
         xl: '12px',
       }
