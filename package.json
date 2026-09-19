@@ -7,6 +7,7 @@
     "dev": "node server/src/index.js & vite",
     "build": "vite build",
     "build-data": "node server/src/pipeline/buildData.js",
+    "export-excel": "python scripts/export_executive_excel.py",
     "preview": "vite preview",
     "start": "node server/src/index.js",
     "railway-build": "npm install && npm run build-data && npm run build"

@@ -484,6 +484,16 @@ app.delete('/api/contractors/:name', async (req, res) => {
   res.json({ success: true, message: 'تم حذف المقاول وإعادة تحليل البلاغات' })
 })
 
+// Export executive pending reports Excel
+app.get('/api/export/pending-excel', (req, res) => {
+  const filePath = path.join(__dirname, '../../XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+  if (fs.existsSync(filePath)) {
+    res.download(path.resolve(filePath), 'تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+  } else {
+    res.status(404).json({ error: 'ملف الإكسيل غير موجود' })
+  }
+})
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

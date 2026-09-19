@@ -162,6 +162,15 @@ export default function WeeklyExport() {
         </div>
 
         <div className="flex items-center gap-3">
+          <a
+            href="/api/export/pending-excel"
+            download="تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx"
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-sm"
+            title="تحميل ملف إكسيل الشامل للبلاغات المعلقة المنسق للمدراء"
+          >
+            <span>📊</span>
+            <span>تصدير Excel التنفيذي</span>
+          </a>
           <button
             onClick={exportPNG}
             disabled={exporting}
@@ -190,7 +199,7 @@ export default function WeeklyExport() {
         {/* Header */}
         <div className="text-center border-b pb-6 border-gray-200">
           <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 mb-2">
-            شركة المياه الوطنية • قطاع المشاريع والخدمات الفنية
+            شركة المياه الوطنية • قطاع المشاريع الراسمالية بالقطاع الأوسط
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-blue-700 mb-2">
             📊 تقرير حوكمة وإسناد بلاغات التعدي
