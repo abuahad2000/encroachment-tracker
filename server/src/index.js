@@ -3,6 +3,7 @@ import cors from 'cors'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { exec } from 'child_process'
 import multer from 'multer'
 import { buildData } from './pipeline/buildData.js'
 
@@ -92,6 +93,23 @@ function loadGeneratedData(file) {
     console.error(`Error loading ${file}:`, e.message)
   }
   return null
+}
+
+// Utility to re-generate executive pending reports Excel file
+function runExecutiveExcelExport() {
+  return new Promise((resolve) => {
+    const scriptPath = path.join(__dirname, '../../scripts/export_executive_excel.py')
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+    console.log('📊 Updating executive Excel report...')
+    exec(`"${pythonCmd}" "${scriptPath}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.warn('⚠️ Warning: Error regenerating executive Excel report:', error.message)
+        return resolve(false)
+      }
+      console.log('✅ Executive Excel report successfully updated at XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+      resolve(true)
+    })
+  })
 }
 
 // ===== API Endpoints =====
@@ -205,9 +223,12 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
     console.log('📤 New reports file uploaded, rebuilding data...')
     const result = await buildData()
 
+    // Regenerate executive pending Excel report with latest data
+    await runExecutiveExcelExport()
+
     res.json({
       success: true,
-      message: 'تم رفع الملف وإعادة معالجة البيانات بنجاح',
+      message: 'تم رفع الملف وإعادة معالجة البيانات وتحديث التقرير التنفيذي بنجاح',
       file: req.file.originalname,
       stats: result?.stats,
       timestamp: new Date().toISOString()
@@ -307,8 +328,12 @@ app.post('/api/refresh-data', async (req, res) => {
   try {
     console.log('🔄 Starting data refresh...')
     const result = await buildData()
-    console.log('✅ Data refresh completed')
-    res.json({ success: true, message: 'تم تحديث البيانات بنجاح', stats: result?.stats })
+
+    // Regenerate executive pending Excel report with latest data
+    await runExecutiveExcelExport()
+
+    console.log('✅ Data refresh & Excel report update completed')
+    res.json({ success: true, message: 'تم تحديث البيانات والتقرير التنفيذي بنجاح', stats: result?.stats })
   } catch (err) {
     console.error('❌ Error refreshing data:', err)
     res.status(500).json({ error: 'Failed to refresh data', details: err.message })

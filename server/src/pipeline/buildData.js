@@ -83,6 +83,40 @@ export async function buildData() {
       JSON.stringify(managers, null, 2)
     )
 
+    // Enrich KMZ features with project managers and details
+    const cleanStr = (s) => (s || '').replace(/[^\w\d\u0600-\u06FF]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+    const enrichFeatures = (features) => {
+      for (const f of features) {
+        const op = f.properties?.operationNumber
+        const fName = f.properties?.name || ''
+        const cFName = cleanStr(fName)
+
+        let matched = null
+        if (op) {
+          matched = projects.find(p => p.operationNumber && p.operationNumber.trim() === op.trim())
+        }
+        if (!matched && cFName) {
+          matched = projects.find(p => {
+            const cPName = cleanStr(p.name)
+            return cPName && (cFName.includes(cPName) || cPName.includes(cFName))
+          })
+        }
+
+        if (matched) {
+          f.properties.programManager = matched.programManager || '-'
+          f.properties.projectManager = matched.projectManager || '-'
+          f.properties.contractor = matched.contractor || '-'
+          f.properties.po = matched.po || '-'
+          f.properties.status = matched.status || 'جاري'
+          f.properties.subProgram = matched.subProgram || ''
+          f.properties.scope = matched.scope || ''
+        }
+      }
+    }
+
+    enrichFeatures(geoJsonData.water?.features || [])
+    enrichFeatures(geoJsonData.sanitation?.features || [])
+
     fs.writeFileSync(
       path.join(outputDir, 'layers.json'),
       JSON.stringify(geoJsonData, null, 2)
@@ -170,7 +204,8 @@ const MANAGER_SLUGS = {
   'عبدالله الأسود': 'abdullah-alaswad',
   'علي القحطاني': 'ali-alqahtani',
   'شاكر الحقباني': 'shaker-alhaqbani',
-  'سعيد الحارث': 'saeed-alharthe'
+  'سعيد الحارث': 'saeed-alharthe',
+  'فهد العنزي': 'fahad-alenezi'
 }
 
 function createManagersData(projects, reports) {
@@ -238,6 +273,12 @@ function createManagersData(projects, reports) {
 }
 
 // Run if called directly from CLI
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  buildData().catch(() => process.exit(1))
+if (process.argv[1] && (
+  process.argv[1].endsWith('buildData.js') ||
+  path.resolve(fileURLToPath(import.meta.url)).toLowerCase() === path.resolve(process.argv[1]).toLowerCase()
+)) {
+  buildData().catch((err) => {
+    console.error('buildData error:', err)
+    process.exit(1)
+  })
 }

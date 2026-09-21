@@ -70,26 +70,70 @@ export default function MapView() {
     )
   }, [reports])
 
-  // Extract unique program managers from pending reports
+  // Extract unique program managers from pending reports filtered by sector
   const availableManagers = useMemo(() => {
     const set = new Set()
-    pendingReports.forEach(r => {
+    let pool = pendingReports
+    if (activeTab === 'water') {
+      pool = pool.filter(r => {
+        const sec = r.sector || ''
+        const sub = r.project?.subProgram || ''
+        const pName = r.project?.name || ''
+        return sec === 'مياه' || sub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف'))
+      })
+    } else if (activeTab === 'sanitation') {
+      pool = pool.filter(r => {
+        const sec = r.sector || ''
+        const sub = r.project?.subProgram || ''
+        const pName = r.project?.name || ''
+        return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
+      })
+    }
+
+    pool.forEach(r => {
       if (r.project?.programManager) {
         set.add(r.project.programManager)
       }
     })
     return Array.from(set).sort()
-  }, [pendingReports])
+  }, [pendingReports, activeTab])
 
-  // Filtered reports by selected manager & search query
+  // Reset selected manager if not present in current sector's managers
+  useEffect(() => {
+    if (selectedManager !== 'all' && !availableManagers.includes(selectedManager)) {
+      setSelectedManager('all')
+    }
+  }, [activeTab, availableManagers, selectedManager])
+
+  // Filtered reports by sector (activeTab), selected manager & search query
   const displayedReportPins = useMemo(() => {
     if (!showReportPins) return []
 
     let list = pendingReports
+
+    // 1. Strict sector filtering
+    if (activeTab === 'water') {
+      list = list.filter(r => {
+        const sec = r.sector || ''
+        const sub = r.project?.subProgram || ''
+        const pName = r.project?.name || ''
+        return sec === 'مياه' || sub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف'))
+      })
+    } else if (activeTab === 'sanitation') {
+      list = list.filter(r => {
+        const sec = r.sector || ''
+        const sub = r.project?.subProgram || ''
+        const pName = r.project?.name || ''
+        return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
+      })
+    }
+
+    // 2. Manager filtering
     if (selectedManager !== 'all') {
       list = list.filter(r => r.project?.programManager === selectedManager)
     }
 
+    // 3. Search query
     if (!searchQuery.trim()) return list
     const q = searchQuery.toLowerCase().trim()
     return list.filter(r => {
@@ -98,9 +142,10 @@ export default function MapView() {
       const proj = (r.project?.name || '').toLowerCase()
       const cont = (r.contractorName || r.project?.contractor || '').toLowerCase()
       const mgr = (r.project?.programManager || '').toLowerCase()
-      return idStr.includes(q) || dist.includes(q) || proj.includes(q) || cont.includes(q) || mgr.includes(q)
+      const pmgr = (r.project?.projectManager || '').toLowerCase()
+      return idStr.includes(q) || dist.includes(q) || proj.includes(q) || cont.includes(q) || mgr.includes(q) || pmgr.includes(q)
     })
-  }, [pendingReports, showReportPins, selectedManager, searchQuery])
+  }, [pendingReports, showReportPins, activeTab, selectedManager, searchQuery])
 
   // Filter polygon/linestring features based on tab and search
   const filteredFeatures = useMemo(() => {
@@ -122,29 +167,45 @@ export default function MapView() {
       const name = (f.properties?.name || '').toLowerCase()
       const op = (f.properties?.operationNumber || '').toLowerCase()
       const folder = (f.properties?.folder || '').toLowerCase()
-      return name.includes(q) || op.includes(q) || folder.includes(q)
+      const prog = (f.properties?.programManager || '').toLowerCase()
+      const proj = (f.properties?.projectManager || '').toLowerCase()
+      const cont = (f.properties?.contractor || '').toLowerCase()
+      return name.includes(q) || op.includes(q) || folder.includes(q) || prog.includes(q) || proj.includes(q) || cont.includes(q)
     })
   }, [rawData, activeTab, searchQuery])
 
   const onEachFeature = (feature, layer) => {
     const props = feature.properties || {}
     const name = props.name || 'مشروع بدون اسم'
-    const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه'))
+    const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه')) || (props.subProgram && props.subProgram.includes('مياه'))
     const sectorLabel = isWater ? '💧 قطاع المياه (جاري)' : '🚰 قطاع الصرف الصحي (جاري)'
     const sectorBg = isWater ? '#0284c7' : '#059669'
+
     const op = props.operationNumber ? `<div><span style="color:#64748b;font-size:11px;">رقم العملية:</span> <strong style="font-size:12px;">${props.operationNumber}</strong></div>` : ''
-    const folder = props.folder ? `<div><span style="color:#64748b;font-size:11px;">التصنيف:</span> <span style="font-size:12px;">${props.folder}</span></div>` : ''
+    const po = props.po && props.po !== '-' ? `<div><span style="color:#64748b;font-size:11px;">أمر الشراء (PO):</span> <strong style="font-size:12px;color:#1e40af;">${props.po}</strong></div>` : ''
+    const progMgr = props.programManager && props.programManager !== '-' ? `<div><span style="color:#64748b;font-size:11px;">مدير البرنامج:</span> <strong style="font-size:12px;color:#0284c7;">${props.programManager}</strong></div>` : ''
+    const projMgr = props.projectManager && props.projectManager !== '-' ? `<div><span style="color:#64748b;font-size:11px;">مدير المشروع (NWC):</span> <strong style="font-size:12px;color:#0f766e;">${props.projectManager}</strong></div>` : ''
+    const contractor = props.contractor && props.contractor !== '-' ? `<div><span style="color:#64748b;font-size:11px;">المقاول:</span> <strong style="font-size:12px;color:#b45309;">${props.contractor}</strong></div>` : ''
+    const status = props.status ? `<div><span style="color:#64748b;font-size:11px;">حالة المشروع:</span> <span style="background:#e2e8f0;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:bold;">${props.status}</span></div>` : ''
+    const scope = props.scope ? `<div><span style="color:#64748b;font-size:11px;">النطاق:</span> <span style="font-size:11px;">${props.scope}</span></div>` : ''
 
     const content = `
-      <div style="direction:rtl;text-align:right;font-family:sans-serif;padding:6px;min-width:220px;">
+      <div style="direction:rtl;text-align:right;font-family:sans-serif;padding:6px;min-width:240px;line-height:1.5;">
         <div style="display:inline-block;background:${sectorBg};color:white;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:12px;margin-bottom:6px;">
           ${sectorLabel}
         </div>
         <div style="font-weight:bold;font-size:13px;color:#0f172a;margin-bottom:6px;line-height:1.4;">
           ${name}
         </div>
-        ${op}
-        ${folder}
+        <div style="display:flex;flex-direction:column;gap:3px;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:4px;">
+          ${progMgr}
+          ${projMgr}
+          ${contractor}
+          ${op}
+          ${po}
+          ${status}
+          ${scope}
+        </div>
       </div>
     `
     layer.bindPopup(content)
@@ -360,6 +421,12 @@ export default function MapView() {
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
                       <strong style={{ color: '#1e293b' }}>مدير البرنامج:</strong> <span style={{ color: '#0284c7', fontWeight: 'bold' }}>{r.project?.programManager || '-'}</span>
                     </div>
+
+                    {r.project?.projectManager && r.project.projectManager !== '-' && (
+                      <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
+                        <strong style={{ color: '#1e293b' }}>مدير المشروع:</strong> <span style={{ color: '#0f766e', fontWeight: 'bold' }}>{r.project.projectManager}</span>
+                      </div>
+                    )}
 
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
                       <strong style={{ color: '#1e293b' }}>المشروع المسند:</strong> {r.project?.name}

@@ -5,6 +5,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -22,6 +24,26 @@ export default function Dashboard() {
 
   const handleUploadSuccess = () => {
     setRefreshKey(prev => prev + 1)
+  }
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true)
+      setRefreshMessage(null)
+      const res = await fetch('/api/refresh-data', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setRefreshMessage('✅ تم تحديث البيانات ومعالجة التقرير التنفيذي بنجاح')
+        setRefreshKey(prev => prev + 1)
+      } else {
+        setRefreshMessage('⚠️ ' + (data.error || 'فشل التحديث'))
+      }
+    } catch (e) {
+      console.error('Error refreshing:', e)
+      setRefreshMessage('❌ خطأ أثناء تحديث البيانات')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   if (loading) return <div className="text-center py-8">جاري التحميل...</div>
@@ -92,13 +114,30 @@ export default function Dashboard() {
         <p className="text-gray-600 dark:text-gray-400 mb-4">
           {stats.lastUpdate ? new Date(stats.lastUpdate).toLocaleString('ar-SA') : 'لم يتم التحديث'}
         </p>
-        <button className="btn-primary" onClick={() => {
-          fetch('/api/refresh-data', { method: 'POST' })
-            .then(() => window.location.reload())
-            .catch(e => console.error('Error refreshing:', e))
-        }}>
-          تحديث البيانات
-        </button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <button
+            className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <>
+                <span className="inline-block animate-spin">⏳</span>
+                <span>جاري معالجة البيانات وتحديث ملف الإكسيل التنفيذي...</span>
+              </>
+            ) : (
+              <>
+                <span>🔄</span>
+                <span>تحديث البيانات والتقرير التنفيذي</span>
+              </>
+            )}
+          </button>
+          {refreshMessage && (
+            <span className="text-sm font-semibold animate-pulse">
+              {refreshMessage}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

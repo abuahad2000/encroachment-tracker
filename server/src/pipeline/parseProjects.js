@@ -13,8 +13,9 @@ const MANAGER_NAME_MAP = {
   'عبدالله العنزي': 'عبدالله علي العنزي',
   'م. عبدالله العنزي': 'عبدالله علي العنزي',
   'عبدالله علي العنزي': 'عبدالله علي العنزي',
-  'م / فهد العنزي': 'عبدالله علي العنزي',
-  'م. فهد العنزي': 'عبدالله علي العنزي',
+  'م / فهد العنزي': 'فهد العنزي',
+  'م. فهد العنزي': 'فهد العنزي',
+  'فهد العنزي': 'فهد العنزي',
   'سفر العتيبي': 'سفر العتيبي',
   'م. سفر العتيبي': 'سفر العتيبي',
   'علي الشهري': 'علي الشهري',
@@ -103,11 +104,13 @@ export function parseProjects() {
           progPhone: project.prog_phone && project.prog_phone !== '-' ? project.prog_phone : (
             rawMgr === 'سعيد الحارث' ? '598991815' :
             rawMgr === 'شاكر الحقباني' ? '555022025' :
+            rawMgr === 'فهد العنزي' || rawMgr === 'م / فهد العنزي' ? '555278400' :
             rawMgr === 'علي القحطاني' ? '555299813' : '-'
           ),
           progEmail: project.prog_email && project.prog_email !== '-' ? project.prog_email : (
             rawMgr === 'سعيد الحارث' ? 'salharth@nwc.com.sa' :
             rawMgr === 'شاكر الحقباني' ? 'talnoufal@nwc.com.sa' :
+            rawMgr === 'فهد العنزي' || rawMgr === 'م / فهد العنزي' ? 'fhalenazi@nwc.com.sa' :
             rawMgr === 'علي القحطاني' ? 'aaalqahtani@nwc.com.sa' : '-'
           ),
           projectManager: project.project_manager,
