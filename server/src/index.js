@@ -584,40 +584,84 @@ app.post('/api/contractors', async (req, res) => {
 
 // ===== Contractor Directory Endpoints =====
 const contractorDirectoryPath = path.join(__dirname, '../data/contractor_directory.json')
+const contractorDirectoryBackupPath = path.join(__dirname, '../data/contractor_directory_backup.json')
 const contractorProfilesPath = path.join(__dirname, '../data/contractor_profiles.json')
+const contractorProfilesBackupPath = path.join(__dirname, '../data/contractor_profiles_backup.json')
 
 function loadContractorDirectory() {
-  if (fs.existsSync(contractorDirectoryPath)) {
+  const mergedMap = new Map()
+
+  const readAndMerge = (filePath) => {
+    if (!fs.existsSync(filePath)) return
     try {
-      return JSON.parse(fs.readFileSync(contractorDirectoryPath, 'utf-8'))
+      const items = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          if (!item || !item.id) return
+          const k = String(item.id).trim()
+          if (!mergedMap.has(k)) {
+            mergedMap.set(k, item)
+          } else {
+            const prev = mergedMap.get(k)
+            mergedMap.set(k, {
+              ...prev,
+              ...item,
+              crNumber: (item.crNumber && item.crNumber.trim()) || prev.crNumber || '',
+              unifiedNumber: (item.unifiedNumber && item.unifiedNumber.trim()) || prev.unifiedNumber || '',
+              managerName: (item.managerName && item.managerName.trim()) || prev.managerName || '',
+              managerPhone: (item.managerPhone && item.managerPhone.trim()) || prev.managerPhone || '',
+              managerEmail: (item.managerEmail && item.managerEmail.trim()) || prev.managerEmail || ''
+            })
+          }
+        })
+      }
     } catch (e) {
-      console.error('Error loading contractor directory:', e)
+      console.error(`Error loading ${filePath}:`, e.message)
     }
   }
-  return []
+
+  // Read backup first, then primary
+  readAndMerge(contractorDirectoryBackupPath)
+  readAndMerge(contractorDirectoryPath)
+
+  return Array.from(mergedMap.values())
 }
 
 function saveContractorDirectory(data) {
   const dir = path.dirname(contractorDirectoryPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(contractorDirectoryPath, JSON.stringify(data, null, 2))
+  try {
+    fs.writeFileSync(contractorDirectoryBackupPath, JSON.stringify(data, null, 2))
+  } catch (e) {
+    console.error('Error saving contractor_directory_backup:', e.message)
+  }
 }
 
 function loadContractorProfiles() {
+  let profiles = {}
+  if (fs.existsSync(contractorProfilesBackupPath)) {
+    try {
+      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(contractorProfilesBackupPath, 'utf-8')) }
+    } catch (e) {}
+  }
   if (fs.existsSync(contractorProfilesPath)) {
     try {
-      return JSON.parse(fs.readFileSync(contractorProfilesPath, 'utf-8'))
-    } catch (e) {
-      console.error('Error loading contractor profiles:', e)
-    }
+      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(contractorProfilesPath, 'utf-8')) }
+    } catch (e) {}
   }
-  return {}
+  return profiles
 }
 
 function saveContractorProfiles(data) {
   const dir = path.dirname(contractorProfilesPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(contractorProfilesPath, JSON.stringify(data, null, 2))
+  try {
+    fs.writeFileSync(contractorProfilesBackupPath, JSON.stringify(data, null, 2))
+  } catch (e) {
+    console.error('Error saving contractor_profiles_backup:', e.message)
+  }
 }
 
 // Get contractor directory
@@ -730,31 +774,34 @@ app.post('/api/contractor-directory/update', (req, res) => {
   directory[idx] = updatedItem
 
   const targetContractor = updatedItem.contractorName
-  if (applyToAllContractorProjects && targetContractor) {
-    directory.forEach((item, i) => {
-      if (item.contractorName === targetContractor && i !== idx) {
-        directory[i] = {
-          ...item,
-          crNumber: updatedItem.crNumber,
-          unifiedNumber: updatedItem.unifiedNumber,
-          managerName: updatedItem.managerName,
-          managerPhone: updatedItem.managerPhone,
-          managerEmail: updatedItem.managerEmail,
-          updatedAt: new Date().toISOString()
-        }
-      }
-    })
-
+  if (targetContractor && targetContractor !== 'غير محدد' && targetContractor !== '-') {
     const profiles = loadContractorProfiles()
+    const pPrev = profiles[targetContractor] || {}
     profiles[targetContractor] = {
-      crNumber: updatedItem.crNumber,
-      unifiedNumber: updatedItem.unifiedNumber,
-      managerName: updatedItem.managerName,
-      managerPhone: updatedItem.managerPhone,
-      managerEmail: updatedItem.managerEmail,
+      crNumber: updatedItem.crNumber || pPrev.crNumber || '',
+      unifiedNumber: updatedItem.unifiedNumber || pPrev.unifiedNumber || '',
+      managerName: updatedItem.managerName || pPrev.managerName || '',
+      managerPhone: updatedItem.managerPhone || pPrev.managerPhone || '',
+      managerEmail: updatedItem.managerEmail || pPrev.managerEmail || '',
       updatedAt: new Date().toISOString()
     }
     saveContractorProfiles(profiles)
+
+    if (applyToAllContractorProjects) {
+      directory.forEach((item, i) => {
+        if (item.contractorName === targetContractor && i !== idx) {
+          directory[i] = {
+            ...item,
+            crNumber: updatedItem.crNumber || item.crNumber || '',
+            unifiedNumber: updatedItem.unifiedNumber || item.unifiedNumber || '',
+            managerName: updatedItem.managerName || item.managerName || '',
+            managerPhone: updatedItem.managerPhone || item.managerPhone || '',
+            managerEmail: updatedItem.managerEmail || item.managerEmail || '',
+            updatedAt: new Date().toISOString()
+          }
+        }
+      })
+    }
   }
 
   saveContractorDirectory(directory)
@@ -806,6 +853,20 @@ app.post('/api/contractor-directory/add', (req, res) => {
 
   directory.unshift(newItem)
   saveContractorDirectory(directory)
+
+  if (newItem.contractorName && (newItem.crNumber || newItem.unifiedNumber || newItem.managerPhone || newItem.managerEmail || newItem.managerName)) {
+    const profiles = loadContractorProfiles()
+    const pPrev = profiles[newItem.contractorName] || {}
+    profiles[newItem.contractorName] = {
+      crNumber: newItem.crNumber || pPrev.crNumber || '',
+      unifiedNumber: newItem.unifiedNumber || pPrev.unifiedNumber || '',
+      managerName: newItem.managerName || pPrev.managerName || '',
+      managerPhone: newItem.managerPhone || pPrev.managerPhone || '',
+      managerEmail: newItem.managerEmail || pPrev.managerEmail || '',
+      updatedAt: new Date().toISOString()
+    }
+    saveContractorProfiles(profiles)
+  }
 
   res.json({ success: true, item: newItem, message: 'تمت إضافة المشروع والمقاول بنجاح' })
 })

@@ -149,6 +149,9 @@ export async function buildData() {
       JSON.stringify(geoJsonData, null, 2)
     )
 
+    // Synchronize contractor directory and permanently safeguard 100% of user data against any Excel updates
+    syncContractorDirectory(projects)
+
     // 8. Summary
     console.log('\n✅ تم إتمام المعالجة بنجاح!')
     console.log(`\n📊 الإحصائيات:`)
@@ -305,6 +308,196 @@ export function createManagersData(projects, reports) {
       }))
     }
   }).sort((a, b) => b.pendingReportsCount - a.pendingReportsCount || b.inProgressReportsCount - a.inProgressReportsCount)
+}
+
+/**
+ * Synchronize contractor directory with parsed projects and permanently preserve
+ * all user-filled information (CR number, unified number, manager contacts, manual entries)
+ * against any Excel updates or pipeline rebuilds.
+ */
+export function syncContractorDirectory(projects) {
+  const dirPath = path.join(__dirname, '../../data/contractor_directory.json')
+  const backupDirPath = path.join(__dirname, '../../data/contractor_directory_backup.json')
+  const profilesPath = path.join(__dirname, '../../data/contractor_profiles.json')
+  const backupProfilesPath = path.join(__dirname, '../../data/contractor_profiles_backup.json')
+
+  // 1. Load profiles from backup then primary
+  let profiles = {}
+  if (fs.existsSync(backupProfilesPath)) {
+    try {
+      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(backupProfilesPath, 'utf-8')) }
+    } catch (e) {}
+  }
+  if (fs.existsSync(profilesPath)) {
+    try {
+      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(profilesPath, 'utf-8')) }
+    } catch (e) {}
+  }
+
+  // 2. Load existing directory from backup and primary
+  const existingMap = new Map()
+  const manualItems = []
+
+  const loadItems = (filePath) => {
+    if (!fs.existsSync(filePath)) return
+    try {
+      const items = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+      if (Array.isArray(items)) {
+        items.forEach(item => {
+          if (!item) return
+          const isManual = item.source === 'manual_added' || String(item.id).startsWith('manual_')
+          if (isManual) {
+            if (!manualItems.some(m => String(m.id) === String(item.id))) {
+              manualItems.push(item)
+            }
+            return
+          }
+
+          const idKey = String(item.id).trim()
+          if (!existingMap.has(idKey)) {
+            existingMap.set(idKey, item)
+          } else {
+            const prev = existingMap.get(idKey)
+            existingMap.set(idKey, {
+              ...prev,
+              ...item,
+              crNumber: (item.crNumber && item.crNumber.trim()) || prev.crNumber || '',
+              unifiedNumber: (item.unifiedNumber && item.unifiedNumber.trim()) || prev.unifiedNumber || '',
+              managerName: (item.managerName && item.managerName.trim()) || prev.managerName || '',
+              managerPhone: (item.managerPhone && item.managerPhone.trim()) || prev.managerPhone || '',
+              managerEmail: (item.managerEmail && item.managerEmail.trim()) || prev.managerEmail || ''
+            })
+          }
+
+          const cName = (item.contractorName || '').trim()
+          if (cName && cName !== 'غير محدد' && cName !== '-') {
+            const hasCR = Boolean(item.crNumber && item.crNumber.trim())
+            const hasPhone = Boolean(item.managerPhone && item.managerPhone.trim())
+            const hasEmail = Boolean(item.managerEmail && item.managerEmail.trim())
+            const hasName = Boolean(item.managerName && item.managerName.trim())
+            const hasUni = Boolean(item.unifiedNumber && item.unifiedNumber.trim())
+            if (hasCR || hasPhone || hasEmail || hasName || hasUni) {
+              const pProf = profiles[cName] || {}
+              profiles[cName] = {
+                crNumber: (item.crNumber && item.crNumber.trim()) || pProf.crNumber || '',
+                unifiedNumber: (item.unifiedNumber && item.unifiedNumber.trim()) || pProf.unifiedNumber || '',
+                managerName: (item.managerName && item.managerName.trim()) || pProf.managerName || '',
+                managerPhone: (item.managerPhone && item.managerPhone.trim()) || pProf.managerPhone || '',
+                managerEmail: (item.managerEmail && item.managerEmail.trim()) || pProf.managerEmail || '',
+                updatedAt: item.updatedAt || new Date().toISOString()
+              }
+            }
+          }
+        })
+      }
+    } catch (e) {}
+  }
+
+  loadItems(backupDirPath)
+  loadItems(dirPath)
+
+  // 3. Reconcile with incoming projects
+  const updatedDirectory = []
+
+  // Add all manual entries first
+  manualItems.forEach(m => updatedDirectory.push(m))
+
+  const matchedExistingIds = new Set()
+
+  if (Array.isArray(projects)) {
+    projects.forEach(p => {
+      const pId = String(p.id).trim()
+      const pOp = (p.operationNumber || '').trim()
+      const pName = (p.name || '').trim()
+      const cName = (p.contractor || '').trim() || 'غير محدد'
+      const prof = profiles[cName] || {}
+
+      let existing = existingMap.get(pId)
+      if (!existing && pOp) {
+        for (const [_, item] of existingMap.entries()) {
+          if (item.projectNumber && item.projectNumber.trim() === pOp) {
+            existing = item
+            break
+          }
+        }
+      }
+      if (!existing && pName && cName) {
+        for (const [_, item] of existingMap.entries()) {
+          if (item.projectName && item.projectName.trim() === pName && item.contractorName === cName) {
+            existing = item
+            break
+          }
+        }
+      }
+
+      if (existing) {
+        matchedExistingIds.add(String(existing.id).trim())
+        const mergedItem = {
+          ...existing,
+          id: pId,
+          contractorName: existing.contractorName || cName,
+          projectNumber: p.operationNumber || p.id || existing.projectNumber || '-',
+          projectName: p.name || existing.projectName || '-',
+          projectLocation: p.scope || p.subProgram || existing.projectLocation || '-',
+          programManager: (existing.programManager && existing.programManager !== '-') ? existing.programManager : (p.programManager || '-'),
+          projectManager: (existing.projectManager && existing.projectManager !== '-') ? existing.projectManager : (p.projectManager || '-'),
+          status: p.status || existing.status || 'جاري',
+          source: 'nwc_project',
+          // User filled fields are 100% IMMUTABLE and preserved:
+          crNumber: (existing.crNumber && existing.crNumber.trim()) || prof.crNumber || '',
+          unifiedNumber: (existing.unifiedNumber && existing.unifiedNumber.trim()) || prof.unifiedNumber || '',
+          managerName: (existing.managerName && existing.managerName.trim()) || prof.managerName || '',
+          managerPhone: (existing.managerPhone && existing.managerPhone.trim()) || prof.managerPhone || '',
+          managerEmail: (existing.managerEmail && existing.managerEmail.trim()) || prof.managerEmail || '',
+          updatedAt: existing.updatedAt || new Date().toISOString()
+        }
+        updatedDirectory.push(mergedItem)
+      } else {
+        const newItem = {
+          id: pId,
+          contractorName: cName,
+          projectNumber: p.operationNumber || p.id || '-',
+          projectName: p.name || '-',
+          projectLocation: p.scope || p.subProgram || '-',
+          programManager: p.programManager || '-',
+          projectManager: p.projectManager || '-',
+          crNumber: prof.crNumber || '',
+          unifiedNumber: prof.unifiedNumber || '',
+          managerName: prof.managerName || '',
+          managerPhone: prof.managerPhone || '',
+          managerEmail: prof.managerEmail || '',
+          status: p.status || 'جاري',
+          source: 'nwc_project',
+          updatedAt: new Date().toISOString()
+        }
+        updatedDirectory.push(newItem)
+      }
+    })
+  }
+
+  // Preserve any remaining existing items that had user data even if not in current projects list
+  for (const [idKey, item] of existingMap.entries()) {
+    if (!matchedExistingIds.has(idKey)) {
+      updatedDirectory.push(item)
+    }
+  }
+
+  // 4. Persist to BOTH primary and backup files
+  try {
+    const dataDir = path.dirname(dirPath)
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
+
+    fs.writeFileSync(dirPath, JSON.stringify(updatedDirectory, null, 2))
+    fs.writeFileSync(backupDirPath, JSON.stringify(updatedDirectory, null, 2))
+
+    fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2))
+    fs.writeFileSync(backupProfilesPath, JSON.stringify(profiles, null, 2))
+    console.log(`📁 تم مزامنة وتأمين بيانات جدول المقاولين (${updatedDirectory.length} سجل - حفظ احتياطي دائم)`)
+  } catch (e) {
+    console.error('Error saving synchronized contractor directory:', e.message)
+  }
+
+  return updatedDirectory
 }
 
 // Run if called directly from CLI

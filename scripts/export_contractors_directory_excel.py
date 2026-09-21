@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIRECTORY_FILE = os.path.join(BASE_DIR, 'server', 'data', 'contractor_directory.json')
+BACKUP_DIRECTORY_FILE = os.path.join(BASE_DIR, 'server', 'data', 'contractor_directory_backup.json')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'XLSX')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, 'سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
@@ -45,12 +46,25 @@ def auto_fit_columns(ws, max_cols=20, max_width_limit=55):
         ws.column_dimensions[col_letter].width = width
 
 def export_directory_excel():
-    if not os.path.exists(DIRECTORY_FILE):
-        print(f"Error: {DIRECTORY_FILE} does not exist.")
-        return False
+    directory = []
+    if os.path.exists(DIRECTORY_FILE):
+        try:
+            with open(DIRECTORY_FILE, 'r', encoding='utf-8') as f:
+                directory = json.load(f)
+        except Exception as e:
+            print(f"Warning loading primary directory: {e}")
 
-    with open(DIRECTORY_FILE, 'r', encoding='utf-8') as f:
-        directory = json.load(f)
+    if (not directory or len(directory) == 0) and os.path.exists(BACKUP_DIRECTORY_FILE):
+        try:
+            with open(BACKUP_DIRECTORY_FILE, 'r', encoding='utf-8') as f:
+                directory = json.load(f)
+                print("Loaded directory from backup file.")
+        except Exception as e:
+            print(f"Warning loading backup directory: {e}")
+
+    if not directory:
+        print(f"Error: Neither {DIRECTORY_FILE} nor {BACKUP_DIRECTORY_FILE} exists or contains data.")
+        return False
 
     wb = openpyxl.Workbook()
     ws = wb.active
