@@ -38,10 +38,10 @@ export default function App() {
               <div className="flex items-center gap-4">
                 <Link to="/" className="hover:text-blue-100 transition">لوحة رئيسية</Link>
                 <Link to="/reports" className="hover:text-blue-100 transition">البلاغات</Link>
-                <Link to="/contractors" className="hover:text-blue-100 transition">المقاولون</Link>
                 <Link to="/map" className="hover:text-blue-100 transition">الخريطة</Link>
                 <Link to="/managers" className="hover:text-blue-100 transition">المدراء</Link>
                 <Link to="/export" className="hover:text-blue-100 transition">التصدير</Link>
+                <Link to="/contractors" className="hover:text-blue-100 transition font-bold bg-blue-700/60 hover:bg-blue-700 px-3 py-1 rounded-lg border border-blue-400/40">المقاولين</Link>
               </div>
             </div>
             <DarkModeToggle isDark={isDark} toggle={toggleDark} />

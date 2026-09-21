@@ -513,20 +513,261 @@ app.post('/api/contractors', async (req, res) => {
   res.json({ success: true, contractor: item, message: 'تم حفظ المقاول وإعادة تحليل البلاغات' })
 })
 
-// Delete custom contractor
-app.delete('/api/contractors/:name', async (req, res) => {
-  const name = decodeURIComponent(req.params.name)
-  const config = loadContractorsConfig()
-  config.customContractors = config.customContractors.filter(c => c.name !== name)
-  saveContractorsConfig(config)
+// ===== Contractor Directory Endpoints =====
+const contractorDirectoryPath = path.join(__dirname, '../data/contractor_directory.json')
+const contractorProfilesPath = path.join(__dirname, '../data/contractor_profiles.json')
 
-  try {
-    await buildData()
-  } catch (e) {
-    console.warn('Pipeline rebuild warning:', e.message)
+function loadContractorDirectory() {
+  if (fs.existsSync(contractorDirectoryPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(contractorDirectoryPath, 'utf-8'))
+    } catch (e) {
+      console.error('Error loading contractor directory:', e)
+    }
+  }
+  return []
+}
+
+function saveContractorDirectory(data) {
+  const dir = path.dirname(contractorDirectoryPath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(contractorDirectoryPath, JSON.stringify(data, null, 2))
+}
+
+function loadContractorProfiles() {
+  if (fs.existsSync(contractorProfilesPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(contractorProfilesPath, 'utf-8'))
+    } catch (e) {
+      console.error('Error loading contractor profiles:', e)
+    }
+  }
+  return {}
+}
+
+function saveContractorProfiles(data) {
+  const dir = path.dirname(contractorProfilesPath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(contractorProfilesPath, JSON.stringify(data, null, 2))
+}
+
+// Get contractor directory
+app.get('/api/contractor-directory', (req, res) => {
+  let directory = loadContractorDirectory()
+  const profiles = loadContractorProfiles()
+
+  // If empty, initialize from projects.json
+  if (directory.length === 0) {
+    const projects = loadGeneratedData('projects.json') || []
+    directory = projects.map(p => {
+      const cName = (p.contractor || '').trim() || 'غير محدد'
+      const prof = profiles[cName] || {}
+      return {
+        id: String(p.id),
+        contractorName: cName,
+        projectNumber: p.operationNumber || p.id || '-',
+        projectName: p.name || '-',
+        projectLocation: p.scope || p.subProgram || '-',
+        programManager: p.programManager || '-',
+        projectManager: p.projectManager || '-',
+        crNumber: prof.crNumber || '',
+        unifiedNumber: prof.unifiedNumber || '',
+        managerName: prof.managerName || '',
+        managerPhone: prof.managerPhone || '',
+        managerEmail: prof.managerEmail || '',
+        status: p.status || 'جاري',
+        source: 'nwc_project'
+      }
+    })
+    saveContractorDirectory(directory)
   }
 
-  res.json({ success: true, message: 'تم حذف المقاول وإعادة تحليل البلاغات' })
+  // Calculate statistics
+  const uniqueContractors = new Set()
+  let completedCount = 0
+
+  directory.forEach(item => {
+    if (item.contractorName && item.contractorName !== 'غير محدد' && item.contractorName !== '-') {
+      uniqueContractors.add(item.contractorName)
+    }
+    const hasCR = Boolean(item.crNumber && item.crNumber.trim())
+    const hasContact = Boolean(item.managerPhone && item.managerPhone.trim()) || Boolean(item.managerEmail && item.managerEmail.trim()) || Boolean(item.managerName && item.managerName.trim())
+    if (hasCR || hasContact) {
+      completedCount++
+    }
+  })
+
+  const programManagers = Array.from(new Set(directory.map(d => d.programManager).filter(m => m && m !== '-'))).sort()
+
+  res.json({
+    directory,
+    stats: {
+      totalEntries: directory.length,
+      uniqueContractors: uniqueContractors.size,
+      completedCount,
+      pendingCount: directory.length - completedCount
+    },
+    programManagers
+  })
+})
+
+// Update an entry in contractor directory
+app.post('/api/contractor-directory/update', (req, res) => {
+  const {
+    id,
+    contractorName,
+    projectNumber,
+    projectName,
+    projectLocation,
+    programManager,
+    projectManager,
+    crNumber,
+    unifiedNumber,
+    managerName,
+    managerPhone,
+    managerEmail,
+    applyToAllContractorProjects
+  } = req.body
+
+  if (!id) {
+    return res.status(400).json({ error: 'معرف السجل مطلوب' })
+  }
+
+  const directory = loadContractorDirectory()
+  const idx = directory.findIndex(d => String(d.id) === String(id))
+
+  if (idx === -1) {
+    return res.status(404).json({ error: 'السجل غير موجود' })
+  }
+
+  const cleanVal = (v) => (v !== undefined && v !== null ? String(v).trim() : '')
+
+  const updatedItem = {
+    ...directory[idx],
+    contractorName: cleanVal(contractorName) || directory[idx].contractorName,
+    projectNumber: cleanVal(projectNumber) || directory[idx].projectNumber,
+    projectName: cleanVal(projectName) || directory[idx].projectName,
+    projectLocation: cleanVal(projectLocation) || directory[idx].projectLocation,
+    programManager: cleanVal(programManager) || directory[idx].programManager,
+    projectManager: cleanVal(projectManager) || directory[idx].projectManager,
+    crNumber: cleanVal(crNumber),
+    unifiedNumber: cleanVal(unifiedNumber),
+    managerName: cleanVal(managerName),
+    managerPhone: cleanVal(managerPhone),
+    managerEmail: cleanVal(managerEmail),
+    updatedAt: new Date().toISOString()
+  }
+
+  directory[idx] = updatedItem
+
+  const targetContractor = updatedItem.contractorName
+  if (applyToAllContractorProjects && targetContractor) {
+    directory.forEach((item, i) => {
+      if (item.contractorName === targetContractor && i !== idx) {
+        directory[i] = {
+          ...item,
+          crNumber: updatedItem.crNumber,
+          unifiedNumber: updatedItem.unifiedNumber,
+          managerName: updatedItem.managerName,
+          managerPhone: updatedItem.managerPhone,
+          managerEmail: updatedItem.managerEmail,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    })
+
+    const profiles = loadContractorProfiles()
+    profiles[targetContractor] = {
+      crNumber: updatedItem.crNumber,
+      unifiedNumber: updatedItem.unifiedNumber,
+      managerName: updatedItem.managerName,
+      managerPhone: updatedItem.managerPhone,
+      managerEmail: updatedItem.managerEmail,
+      updatedAt: new Date().toISOString()
+    }
+    saveContractorProfiles(profiles)
+  }
+
+  saveContractorDirectory(directory)
+
+  res.json({ success: true, item: updatedItem, message: 'تم حفظ وتحديث بيانات المقاول بنجاح' })
+})
+
+// Add new project/contractor record
+app.post('/api/contractor-directory/add', (req, res) => {
+  const {
+    contractorName,
+    projectNumber,
+    projectName,
+    projectLocation,
+    programManager,
+    projectManager,
+    crNumber,
+    unifiedNumber,
+    managerName,
+    managerPhone,
+    managerEmail
+  } = req.body
+
+  if (!contractorName || !contractorName.trim()) {
+    return res.status(400).json({ error: 'اسم المقاول مطلوب' })
+  }
+
+  const cleanVal = (v) => (v !== undefined && v !== null ? String(v).trim() : '')
+  const directory = loadContractorDirectory()
+
+  const newItem = {
+    id: `manual_${Date.now()}`,
+    contractorName: cleanVal(contractorName),
+    projectNumber: cleanVal(projectNumber) || '-',
+    projectName: cleanVal(projectName) || '-',
+    projectLocation: cleanVal(projectLocation) || '-',
+    programManager: cleanVal(programManager) || '-',
+    projectManager: cleanVal(projectManager) || '-',
+    crNumber: cleanVal(crNumber),
+    unifiedNumber: cleanVal(unifiedNumber),
+    managerName: cleanVal(managerName),
+    managerPhone: cleanVal(managerPhone),
+    managerEmail: cleanVal(managerEmail),
+    status: 'جاري',
+    source: 'manual_added',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+
+  directory.unshift(newItem)
+  saveContractorDirectory(directory)
+
+  res.json({ success: true, item: newItem, message: 'تمت إضافة المشروع والمقاول بنجاح' })
+})
+
+// Delete manual contractor directory record
+app.delete('/api/contractor-directory/:id', (req, res) => {
+  const id = req.params.id
+  let directory = loadContractorDirectory()
+  const prevLen = directory.length
+  directory = directory.filter(d => String(d.id) !== String(id))
+
+  if (directory.length === prevLen) {
+    return res.status(404).json({ error: 'السجل غير موجود' })
+  }
+
+  saveContractorDirectory(directory)
+  res.json({ success: true, message: 'تم حذف السجل بنجاح' })
+})
+
+// Export contractor directory Excel
+app.get('/api/export/contractor-directory-excel', (req, res) => {
+  const scriptPath = path.join(__dirname, '../../scripts/export_contractors_directory_excel.py')
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+  exec(`"${pythonCmd}" "${scriptPath}"`, (error) => {
+    const filePath = path.join(__dirname, '../../XLSX/سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
+    if (fs.existsSync(filePath)) {
+      res.download(path.resolve(filePath), 'سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
+    } else {
+      res.status(500).json({ error: 'فشل في تصدير ملف الإكسيل' })
+    }
+  })
 })
 
 // Export executive pending reports Excel
