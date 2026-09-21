@@ -15,21 +15,45 @@ export default function ReportsTable() {
   const [projectInput, setProjectInput] = useState('')
   const [sectorInput, setSectorInput] = useState('مياه')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState(null)
+
+  const reloadData = async () => {
+    try {
+      const [reportsData, projectsData] = await Promise.all([
+        fetch('/api/reports').then(r => r.json()),
+        fetch('/api/projects').then(r => r.json())
+      ])
+      setReports(reportsData || [])
+      setProjects(projectsData || [])
+    } catch (e) {
+      console.error('Error reloading reports data:', e)
+    }
+  }
+
+  const handleRefreshData = async () => {
+    setRefreshing(true)
+    setRefreshMessage(null)
+    try {
+      const res = await fetch('/api/refresh-data', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        await reloadData()
+        setRefreshMessage('✅ تم تحديث البيانات والتقرير التنفيذي بنجاح')
+        setTimeout(() => setRefreshMessage(null), 4500)
+      } else {
+        setRefreshMessage('⚠️ ' + (data.error || 'فشل التحديث'))
+      }
+    } catch (e) {
+      console.error('Error in handleRefreshData:', e)
+      setRefreshMessage('❌ خطأ في الاتصال بالسيرفر')
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/reports').then(r => r.json()),
-      fetch('/api/projects').then(r => r.json())
-    ])
-      .then(([reportsData, projectsData]) => {
-        setReports(reportsData || [])
-        setProjects(projectsData || [])
-        setLoading(false)
-      })
-      .catch(e => {
-        console.error('Error fetching data:', e)
-        setLoading(false)
-      })
+    reloadData().finally(() => setLoading(false))
   }, [])
 
   // Unique contractors from projects list
@@ -219,7 +243,7 @@ export default function ReportsTable() {
   return (
     <div className="space-y-5">
       {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <span>📑</span>
@@ -230,15 +254,42 @@ export default function ReportsTable() {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="w-full lg:w-80">
-          <input
-            type="text"
-            placeholder="بحث برقم البلاغ، الحي، المشروع، المقاول..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
-          />
+        {/* Actions & Search */}
+        <div className="flex flex-wrap items-center gap-3">
+          {refreshMessage && (
+            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 shadow-sm animate-pulse">
+              {refreshMessage}
+            </span>
+          )}
+          <button
+            onClick={handleRefreshData}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title="إعادة مطابقة البلاغات وتحديث التقرير التنفيذي مع حفظ التعديلات السابقة"
+          >
+            <span className={refreshing ? 'inline-block animate-spin' : ''}>🔄</span>
+            <span>{refreshing ? 'جاري المعالجة والتحديث...' : 'تحديث البيانات والتقرير التنفيذي'}</span>
+          </button>
+          <a
+            href="/api/export/pending-excel"
+            download="تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition"
+            title="تحميل ملف الإكسيل التنفيذي الشامل المنسق وفق مدراء البرامج والمقاولين"
+          >
+            <span>📊</span>
+            <span>تصدير Excel التنفيذي</span>
+          </a>
+
+          {/* Search */}
+          <div className="w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="بحث برقم البلاغ، الحي، المقاول..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
