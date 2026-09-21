@@ -260,6 +260,24 @@ app.post('/api/override', async (req, res) => {
     }
   }
 
+  // Find existing report to capture secondary keys (license, coordinates)
+  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+  let existingReport = null
+  let allProjects = []
+
+  if (fs.existsSync(reportsPath)) {
+    try {
+      const currentReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
+      existingReport = currentReports.find(r => normalizeId(r.id) === normalizeId(reportId))
+    } catch (e) {}
+  }
+  if (fs.existsSync(projectsPath)) {
+    try {
+      allProjects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
+    } catch (e) {}
+  }
+
   // Find existing or create new using normalized ID
   const existingIndex = overrides.findIndex(o => normalizeId(o.reportId) === normalizeId(reportId))
   const entry = existingIndex >= 0 ? { ...overrides[existingIndex] } : { reportId }
@@ -269,9 +287,26 @@ app.post('/api/override', async (req, res) => {
   if (reason !== undefined) entry.reason = reason
   if (customContractor !== undefined) entry.customContractor = customContractor
   if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
-  if (req.body.licenseNumber) entry.licenseNumber = req.body.licenseNumber
-
+  
+  // Secondary persistent keys
+  entry.licenseNumber = req.body.licenseNumber || existingReport?.licenseNumber || entry.licenseNumber || ''
+  if (existingReport?.latitude) entry.latitude = existingReport.latitude
+  if (existingReport?.longitude) entry.longitude = existingReport.longitude
+  if (existingReport?.district) entry.district = existingReport.district
+  entry.isLocked = true
   entry.timestamp = new Date().toISOString()
+
+  // If contractor modified and no explicit project given, find matching project for contractor
+  if (customContractor && !entry.projectId && allProjects.length > 0) {
+    const cTarget = String(customContractor).trim()
+    const foundProj = allProjects.find(p => {
+      const cPName = (p.contractor || '').trim()
+      return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
+    })
+    if (foundProj) {
+      entry.projectId = foundProj.id
+    }
+  }
 
   if (existingIndex >= 0) {
     overrides[existingIndex] = entry
@@ -280,10 +315,13 @@ app.post('/api/override', async (req, res) => {
   }
 
   fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
+  // Backup file for permanent persistence
+  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+  try {
+    fs.writeFileSync(overridesBackupPath, JSON.stringify(overrides, null, 2))
+  } catch (e) {}
 
   // Update reports.json, stats.json, and managers.json immediately
-  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
-  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
   let updatedReport = null
 
   if (fs.existsSync(reportsPath)) {
@@ -294,19 +332,18 @@ app.post('/api/override', async (req, res) => {
         if (customContractor !== undefined) {
           reports[rIdx].contractorName = customContractor
           reports[rIdx].customContractor = customContractor
+          reports[rIdx].isLocked = true
+          reports[rIdx].lockedContractor = true
         }
-        if (projectId !== undefined) {
-          if (fs.existsSync(projectsPath)) {
-            const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
-            const proj = projects.find(p => String(p.id).trim() === String(projectId).trim())
-            if (proj) {
-              reports[rIdx].project = { ...proj }
-              reports[rIdx].matched = true
-              reports[rIdx].excluded = false
-              const name = proj.name || ''
-              const sub = proj.subProgram || ''
-              reports[rIdx].sector = (name.includes('مياه') || sub.includes('مياه')) ? 'مياه' : 'صرف'
-            }
+        if (entry.projectId) {
+          const proj = allProjects.find(p => String(p.id).trim() === String(entry.projectId).trim())
+          if (proj) {
+            reports[rIdx].project = { ...proj }
+            reports[rIdx].matched = true
+            reports[rIdx].excluded = false
+            const name = proj.name || ''
+            const sub = proj.subProgram || ''
+            reports[rIdx].sector = (name.includes('مياه') || sub.includes('مياه')) ? 'مياه' : 'صرف'
           }
         }
         if (customProgramManager && reports[rIdx].project) {
@@ -316,7 +353,7 @@ app.post('/api/override', async (req, res) => {
           reports[rIdx].excluded = !!excluded
           if (excluded) {
             reports[rIdx].matched = false
-            reports[rIdx].project = null // CRITICAL: nullify project so report is not counted or shown under the manager!
+            reports[rIdx].project = null
             reports[rIdx].excludedReason = reason || 'مستبعد من نطاق مشاريع مدير البرنامج'
           }
         }

@@ -388,11 +388,16 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     const rIdNorm = normalizeId(report.id)
     const rLic = String(report.licenseNumber || '').trim()
 
-    // Find override by normalized ID or secondary license number
+    // Find override by normalized ID, secondary license number, or exact coordinates
     const override = overrides?.find(o => {
       const oIdNorm = normalizeId(o.reportId)
       if (oIdNorm && rIdNorm && oIdNorm === rIdNorm) return true
       if (o.licenseNumber && rLic && String(o.licenseNumber).trim() === rLic) return true
+      if (o.latitude && o.longitude && report.latitude && report.longitude &&
+          Math.abs(Number(o.latitude) - Number(report.latitude)) < 0.0001 &&
+          Math.abs(Number(o.longitude) - Number(report.longitude)) < 0.0001) {
+        return true
+      }
       return false
     })
 
@@ -414,29 +419,65 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         matched: !!proj,
         excluded: false,
         project: proj || null,
-        confidence: 0.9,
+        confidence: 0.95,
         reason: override.reason || 'manual_override',
-        isMaintenance
+        isMaintenance,
+        isLocked: true
       }
     } else {
-      const match = matchReportToProject(report, activeProjects, contractorsConfig)
-      result = {
+      // Determine effective contractor before matching: if an override modified the contractor, use it directly!
+      const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')
+        ? String(override.customContractor).trim()
+        : report.contractorName
+
+      const reportToMatch = {
         ...report,
+        contractorName: effectiveContractor
+      }
+
+      const match = matchReportToProject(reportToMatch, activeProjects, contractorsConfig)
+      result = {
+        ...reportToMatch,
         ...match,
         isMaintenance
       }
+
+      // If override has a custom contractor, but spatial matching couldn't find a project, attach to any valid project of that contractor
+      if (override?.customContractor && (!result.matched || !result.project)) {
+        const cTarget = String(override.customContractor).trim()
+        const candidateProj = activeProjects.find(p => {
+          const cPName = (p.contractor || '').trim()
+          return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
+        })
+        if (candidateProj) {
+          result.project = { ...candidateProj }
+          result.matched = true
+          result.confidence = 0.9
+          result.reason = 'manual_contractor_override'
+        }
+      }
     }
 
-    if (override?.customProgramManager && result.project) {
-      result.project = {
-        ...result.project,
-        programManager: override.customProgramManager
+    if (override?.customProgramManager) {
+      if (result.project) {
+        result.project = {
+          ...result.project,
+          programManager: override.customProgramManager
+        }
+      } else {
+        const mgrProj = projects.find(p => p.programManager === override.customProgramManager)
+        if (mgrProj) {
+          result.project = { ...mgrProj }
+          result.matched = true
+        }
       }
     }
 
     if (override?.customContractor !== undefined) {
       result.contractorName = override.customContractor
       result.customContractor = override.customContractor
+      result.isLocked = true
+      result.lockedContractor = true
     }
 
     // If report was excluded, ensure project is strictly null

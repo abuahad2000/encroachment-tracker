@@ -27,6 +27,7 @@ export async function buildData() {
 
     // 2. Load overrides & contractors config
     const overridesPath = path.join(__dirname, '../../data/overrides.json')
+    const overridesBackupPath = path.join(__dirname, '../../data/overrides_backup.json')
     let overrides = []
     if (fs.existsSync(overridesPath)) {
       try {
@@ -34,6 +35,11 @@ export async function buildData() {
       } catch (e) {
         overrides = []
       }
+    }
+    if ((!overrides || overrides.length === 0) && fs.existsSync(overridesBackupPath)) {
+      try {
+        overrides = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
+      } catch (e) {}
     }
 
     const contractorsPath = path.join(__dirname, '../../data/contractors.json')

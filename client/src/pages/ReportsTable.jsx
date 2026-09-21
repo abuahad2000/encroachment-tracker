@@ -102,10 +102,11 @@ export default function ReportsTable() {
     try {
       const payload = {
         reportId: editReport.id,
+        licenseNumber: editReport.licenseNumber || '',
         customContractor: contractorInput.trim(),
         customProgramManager: managerInput.trim(),
         projectId: projectInput ? projectInput : undefined,
-        reason: 'تعديل المقاول ومدير البرنامج'
+        reason: 'تعديل وتثبيت المقاول ومدير البرنامج'
       }
 
       const res = await fetch('/api/override', {
@@ -124,6 +125,8 @@ export default function ReportsTable() {
               ...r,
               contractorName: contractorInput.trim(),
               customContractor: contractorInput.trim(),
+              isLocked: true,
+              lockedContractor: true,
               sector: newSector,
               project: selectedProj ? {
                 ...selectedProj,
@@ -139,6 +142,8 @@ export default function ReportsTable() {
             ...selectedReport,
             contractorName: contractorInput.trim(),
             customContractor: contractorInput.trim(),
+            isLocked: true,
+            lockedContractor: true,
             sector: newSector,
             project: selectedProj ? {
               ...selectedProj,
@@ -432,10 +437,15 @@ export default function ReportsTable() {
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`font-semibold ${effectiveContractor === 'غير محدد' ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
                               {effectiveContractor}
                             </span>
+                            {(r.customContractor || r.isLocked || r.lockedContractor) && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800" title="تم تثبيت المقاول يدوياً لهذا البلاغ ومحمي عند رفع ملفات جديدة">
+                                🔒 مثبت
+                              </span>
+                            )}
                             <button
                               onClick={() => openEditModal(r)}
                               title="تعديل المقاول ومدير البرنامج"

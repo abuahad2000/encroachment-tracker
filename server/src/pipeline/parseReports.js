@@ -24,8 +24,9 @@ export function getLatestReportsFilePath() {
     for (const file of files) {
       if (!file.endsWith('.xlsx') && !file.endsWith('.xls')) continue
       if (file.startsWith('~$')) continue // Skip temp lock files
-      // Ignore executive export file itself to avoid self-loop
-      if (file.includes('التنفيذي') || file.includes('تقرير_البلاغات_المعلقة')) continue
+      // Ignore executive export files and directory exports to avoid picking wrong file
+      if (file.includes('التنفيذي') || file.includes('تقرير_البلاغات_المعلقة') || file.includes('سجل_بيانات_مقاولي') || file.includes('تقرير_المقاولين')) continue
+      if (!file.includes('بلاغ') && !file.toLowerCase().includes('report')) continue
 
       const fullPath = path.join(xlsxDir, file)
       try {

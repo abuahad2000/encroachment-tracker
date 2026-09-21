@@ -116,8 +116,10 @@ export default function ManagerDetail() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reportId: editContractorReport.id,
+          licenseNumber: editContractorReport.licenseNumber || undefined,
           customContractor: contractorInput.trim(),
-          reason: 'تعديل اسم المقاول'
+          customProgramManager: manager?.name || undefined,
+          reason: 'تعديل وتثبيت اسم المقاول'
         })
       })
       if (res.ok) {
@@ -126,7 +128,9 @@ export default function ManagerDetail() {
             return {
               ...r,
               contractorName: contractorInput.trim(),
-              customContractor: contractorInput.trim()
+              customContractor: contractorInput.trim(),
+              isLocked: true,
+              lockedContractor: true
             }
           }
           return r
@@ -135,11 +139,13 @@ export default function ManagerDetail() {
           setSelectedReport({
             ...selectedReport,
             contractorName: contractorInput.trim(),
-            customContractor: contractorInput.trim()
+            customContractor: contractorInput.trim(),
+            isLocked: true,
+            lockedContractor: true
           })
         }
         setEditContractorReport(null)
-        alert('تم حفظ المقاول بنجاح مع استمرار ربط البلاغ بالمشروع ومدير البرنامج')
+        alert('تم حفظ وتثبيت المقاول بنجاح مع استمرار ربط البلاغ بالمشروع ومدير البرنامج')
       }
     } catch (e) {
       console.error('Error saving contractor:', e)
