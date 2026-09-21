@@ -54,21 +54,35 @@ export default function ReportsTable() {
   }, [projects])
 
   const handleExclude = async (reportId) => {
-    if (!confirm('هل تريد استبعاد هذا البلاغ؟')) return
+    if (!confirm('هل تريد استبعاد هذا البلاغ من نطاق مشاريع مدير البرنامج؟')) return
     try {
+      const rep = reports.find(r => r.id === reportId)
       const res = await fetch('/api/override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId, excluded: true, reason: 'user_excluded' })
+        body: JSON.stringify({ 
+          reportId, 
+          excluded: true, 
+          reason: 'مستبعد من نطاق مشاريع مدير البرنامج',
+          licenseNumber: rep?.licenseNumber || undefined
+        })
       })
       if (res.ok) {
         setReports(reports.map(r =>
-          r.id === reportId ? { ...r, excluded: true, matched: false } : r
+          r.id === reportId ? { 
+            ...r, 
+            excluded: true, 
+            matched: false, 
+            project: null, 
+            excludedReason: 'مستبعد من نطاق مشاريع مدير البرنامج' 
+          } : r
         ))
         setShowDetails(false)
+        alert('✅ تم استبعاد البلاغ من مدير البرنامج وتحديث التقرير التنفيذي بنجاح')
       }
     } catch (e) {
       console.error('Error:', e)
+      alert('حدث خطأ أثناء استبعاد البلاغ')
     }
   }
 

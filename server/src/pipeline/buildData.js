@@ -139,7 +139,7 @@ export async function buildData() {
   }
 }
 
-function calculateStats(reports, projects) {
+export function calculateStats(reports, projects) {
   // البلاغات المسندة بنجاح إلى مشروع ومدير برنامج
   const assigned = reports.filter(r => r.matched && r.project && !r.excluded)
   // إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (غير معالجة)
@@ -208,7 +208,7 @@ const MANAGER_SLUGS = {
   'فهد العنزي': 'fahad-alenezi'
 }
 
-function createManagersData(projects, reports) {
+export function createManagersData(projects, reports) {
   const managers = {}
 
   // Group projects by manager

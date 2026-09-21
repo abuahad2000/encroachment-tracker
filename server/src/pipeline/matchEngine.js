@@ -381,9 +381,20 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     project._kmzFeatures = ongoingFeatures.filter(f => matchProjectToFeature(project, f))
   }
 
+  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
+
   for (const report of reports) {
     const isMaintenance = isMaintenanceReport(report)
-    const override = overrides?.find(o => String(o.reportId) === String(report.id))
+    const rIdNorm = normalizeId(report.id)
+    const rLic = String(report.licenseNumber || '').trim()
+
+    // Find override by normalized ID or secondary license number
+    const override = overrides?.find(o => {
+      const oIdNorm = normalizeId(o.reportId)
+      if (oIdNorm && rIdNorm && oIdNorm === rIdNorm) return true
+      if (o.licenseNumber && rLic && String(o.licenseNumber).trim() === rLic) return true
+      return false
+    })
 
     let result
     if (override?.excluded) {
@@ -391,18 +402,20 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         ...report,
         matched: false,
         excluded: true,
-        excludedReason: override.reason || 'manual',
+        project: null,
+        excludedReason: override.reason || 'مستبعد من نطاق مشاريع مدير البرنامج',
         confidence: 0,
         isMaintenance
       }
     } else if (override?.projectId) {
-      const proj = projects.find(p => String(p.id) === String(override.projectId))
+      const proj = projects.find(p => String(p.id).trim() === String(override.projectId).trim())
       result = {
         ...report,
         matched: !!proj,
-        project: proj,
-        confidence: 0.5,
-        reason: 'manual_override',
+        excluded: false,
+        project: proj || null,
+        confidence: 0.9,
+        reason: override.reason || 'manual_override',
         isMaintenance
       }
     } else {
@@ -424,6 +437,12 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     if (override?.customContractor !== undefined) {
       result.contractorName = override.customContractor
       result.customContractor = override.customContractor
+    }
+
+    // If report was excluded, ensure project is strictly null
+    if (result.excluded) {
+      result.project = null
+      result.matched = false
     }
 
     // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند، أو من واقع نصوص البلاغ إذا كان مستبعداً

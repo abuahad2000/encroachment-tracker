@@ -5,7 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
 import multer from 'multer'
-import { buildData } from './pipeline/buildData.js'
+import { buildData, calculateStats, createManagersData } from './pipeline/buildData.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -205,21 +205,23 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
     const uploadedPath = req.file.path
     const xlsxDir = path.join(__dirname, '../../XLSX')
     const targetPath = path.join(xlsxDir, 'بلاغات تعدي مقاولي شركة المياه الوطنية 12 سبتمبر.xlsx')
+    const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
     // Create XLSX directory if it doesn't exist
     if (!fs.existsSync(xlsxDir)) {
       fs.mkdirSync(xlsxDir, { recursive: true })
     }
 
-    // Replace the old file with the new one
+    // Replace the default file and keep a copy as reports.xlsx
     fs.copyFileSync(uploadedPath, targetPath)
+    fs.copyFileSync(uploadedPath, uploadedReportsCopy)
     try {
       fs.unlinkSync(uploadedPath) // Delete temp file
     } catch (e) {
       console.warn('Could not delete temp uploaded file:', e.message)
     }
 
-    // Trigger data rebuild directly in-process
+    // Trigger data rebuild directly in-process with persistent overrides preserved
     console.log('📤 New reports file uploaded, rebuilding data...')
     const result = await buildData()
 
@@ -228,7 +230,7 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
     res.json({
       success: true,
-      message: 'تم رفع الملف وإعادة معالجة البيانات وتحديث التقرير التنفيذي بنجاح',
+      message: 'تم رفع الملف وإعادة معالجة البيانات وتحديث التقرير التنفيذي بنجاح مع الاحتفاظ بكافة الاستبعادات والتعديلات السابقة',
       file: req.file.originalname,
       stats: result?.stats,
       timestamp: new Date().toISOString()
@@ -243,8 +245,9 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 })
 
 // Save override
-app.post('/api/override', (req, res) => {
+app.post('/api/override', async (req, res) => {
   const { reportId, projectId, excluded, reason, customContractor, customProgramManager } = req.body
+  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
 
   const overridesPath = path.join(__dirname, '../data/overrides.json')
   let overrides = []
@@ -257,8 +260,8 @@ app.post('/api/override', (req, res) => {
     }
   }
 
-  // Find existing or create new
-  const existingIndex = overrides.findIndex(o => String(o.reportId) === String(reportId))
+  // Find existing or create new using normalized ID
+  const existingIndex = overrides.findIndex(o => normalizeId(o.reportId) === normalizeId(reportId))
   const entry = existingIndex >= 0 ? { ...overrides[existingIndex] } : { reportId }
 
   if (projectId !== undefined) entry.projectId = projectId || null
@@ -266,6 +269,7 @@ app.post('/api/override', (req, res) => {
   if (reason !== undefined) entry.reason = reason
   if (customContractor !== undefined) entry.customContractor = customContractor
   if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
+  if (req.body.licenseNumber) entry.licenseNumber = req.body.licenseNumber
 
   entry.timestamp = new Date().toISOString()
 
@@ -277,22 +281,24 @@ app.post('/api/override', (req, res) => {
 
   fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
 
-  // Update reports.json in generated data directly for immediate response
+  // Update reports.json, stats.json, and managers.json immediately
   const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+  let updatedReport = null
+
   if (fs.existsSync(reportsPath)) {
     try {
       const reports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
-      const rIdx = reports.findIndex(r => r.id === reportId)
+      const rIdx = reports.findIndex(r => normalizeId(r.id) === normalizeId(reportId))
       if (rIdx >= 0) {
         if (customContractor !== undefined) {
           reports[rIdx].contractorName = customContractor
           reports[rIdx].customContractor = customContractor
         }
         if (projectId !== undefined) {
-          const projectsPath = path.join(__dirname, '../data/generated/projects.json')
           if (fs.existsSync(projectsPath)) {
             const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
-            const proj = projects.find(p => String(p.id) === String(projectId))
+            const proj = projects.find(p => String(p.id).trim() === String(projectId).trim())
             if (proj) {
               reports[rIdx].project = { ...proj }
               reports[rIdx].matched = true
@@ -303,24 +309,38 @@ app.post('/api/override', (req, res) => {
             }
           }
         }
-        if (req.body.customProgramManager && reports[rIdx].project) {
-          reports[rIdx].project.programManager = req.body.customProgramManager
+        if (customProgramManager && reports[rIdx].project) {
+          reports[rIdx].project.programManager = customProgramManager
         }
         if (excluded !== undefined) {
           reports[rIdx].excluded = !!excluded
           if (excluded) {
             reports[rIdx].matched = false
-            reports[rIdx].excludedReason = reason || 'user_excluded'
+            reports[rIdx].project = null // CRITICAL: nullify project so report is not counted or shown under the manager!
+            reports[rIdx].excludedReason = reason || 'مستبعد من نطاق مشاريع مدير البرنامج'
           }
         }
         fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2))
+        updatedReport = reports[rIdx]
+
+        // Recompute stats and managers so dashboard and manager cards update immediately
+        if (fs.existsSync(projectsPath)) {
+          const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
+          const updatedStats = calculateStats(reports, projects)
+          const updatedManagers = createManagersData(projects, reports)
+          fs.writeFileSync(path.join(__dirname, '../data/generated/stats.json'), JSON.stringify(updatedStats, null, 2))
+          fs.writeFileSync(path.join(__dirname, '../data/generated/managers.json'), JSON.stringify(updatedManagers, null, 2))
+        }
       }
     } catch (e) {
       console.error('Error updating reports.json with override:', e.message)
     }
   }
 
-  res.json({ success: true, overrides, updatedReportId: reportId })
+  // Regenerate executive pending Excel report in background so it reflects the exclusion immediately
+  runExecutiveExcelExport().catch(e => console.warn('Background Excel export warning:', e.message))
+
+  res.json({ success: true, overrides, updatedReportId: reportId, updatedReport })
 })
 
 // Refresh data

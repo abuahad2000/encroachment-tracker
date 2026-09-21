@@ -632,7 +632,11 @@ def main():
         ("تركي ظافر يحيى الاسمري", "صرف صحي - جنوب الرياض", "582877792", "tdalasmri@nwc.com.sa"),
         ("عبدالله علي العنزي", "مياه - غرب الرياض", "555197474", "aaenazi@nwc.com.sa"),
         ("سعيد الحارث", "مياه وصرف - المحافظات الغربية", "598991815", "salharth@nwc.com.sa"),
-        ("سفر العتيبي", "مياه - شمال الرياض", "503419469", "sfrnalotaibi@nwc.com.sa")
+        ("سفر العتيبي", "مياه - شمال الرياض", "503419469", "sfrnalotaibi@nwc.com.sa"),
+        ("علي الشهري", "مياه - جنوب الرياض", "564499977", "alalshehri.c@nwc.com.sa"),
+        ("فهد العنزي", "مياه - شرق الرياض", "555278400", "fhalenazi@nwc.com.sa"),
+        ("علي القحطاني", "مياه وصرف - المحافظات الشمالية", "555299813", "aaalqahtani@nwc.com.sa"),
+        ("شاكر الحقباني", "مياه وصرف - المحافظات الجنوبية", "555022025", "talnoufal@nwc.com.sa")
     ]
 
     for mgr_name, mgr_scope, mgr_phone, mgr_email in active_managers_list:
@@ -751,9 +755,105 @@ def main():
         ws_m.column_dimensions['S'].width = 42
 
     # -------------------------------------------------------------
-    # 4. ورقة العمل: 🌐 كافة البلاغات المعلقة بالمنظومة (2,424 بلاغاً)
+    # 4. ورقة العمل: 🚫 البلاغات المستبعدة من نطاق مدراء البرامج
     # -------------------------------------------------------------
-    ws_all = wb.create_sheet(title="كافة المعلق بالشركة (2424)")
+    excluded_reports = [r for r in all_reports if r.get('excluded')]
+    excluded_reports.sort(key=lambda r: -(r.get('ageDays') or 0))
+
+    if excluded_reports:
+        ws_exc = wb.create_sheet(title=f"البلاغات المستبعدة ({len(excluded_reports)})")
+        setup_sheet_view(ws_exc)
+
+        ws_exc.merge_cells("A1:N1")
+        ws_exc.row_dimensions[1].height = 36
+        h_exc = ws_exc["A1"]
+        h_exc.value = "سجل البلاغات المستبعدة من نطاق المشاريع الرأسمالية ومدراء البرامج (إحالة للتشغيل والصيانة)"
+        h_exc.font = Font(name="Segoe UI", size=14, bold=True, color=C_WHITE)
+        h_exc.alignment = Alignment(horizontal="center", vertical="center")
+        h_exc.fill = PatternFill(start_color=C_PRIMARY_NAVY, end_color=C_PRIMARY_NAVY, fill_type="solid")
+
+        ws_exc.merge_cells("A2:N2")
+        ws_exc.row_dimensions[2].height = 22
+        h_excs = ws_exc["A2"]
+        h_excs.value = f"إجمالي البلاغات المستبعدة: {len(excluded_reports)} بلاغاً | الحالة: خارج نطاق التزامات مقاولي المشاريع الجارية"
+        h_excs.font = Font(name="Segoe UI", size=9.5, bold=True, color="E2E8F0")
+        h_excs.alignment = Alignment(horizontal="center", vertical="center")
+        h_excs.fill = PatternFill(start_color=C_HEADER_FILL, end_color=C_HEADER_FILL, fill_type="solid")
+
+        headers_exc = [
+            "م", "رقم البلاغ", "حالة الاستبعاد", "سبب ومبرر الاستبعاد",
+            "المقاول المسجل", "القطاع", "المدينة", "الحي", "الشارع",
+            "تاريخ البلاغ", "عمر البلاغ (يوم)", "الجهة المالكة", "الجهة المتعدية", "التوجيه الإداري المعتمد"
+        ]
+
+        ws_exc.row_dimensions[4].height = 28
+        for col_i, h in enumerate(headers_exc, start=1):
+            c = ws_exc.cell(row=4, column=col_i, value=h)
+            c.font = Font(name="Segoe UI", size=9, bold=True, color=C_WHITE)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            c.fill = PatternFill(start_color=C_SUB_HEADER, end_color=C_SUB_HEADER, fill_type="solid")
+            c.border = thin_border()
+
+        for idx, rep in enumerate(excluded_reports, start=1):
+            r_num = idx + 4
+            ws_exc.row_dimensions[r_num].height = 22
+            age_days = rep.get('ageDays', 0)
+            reason = rep.get('excludedReason', 'مستبعد من نطاق مشاريع مدير البرنامج')
+
+            exc_row_data = [
+                idx,
+                rep.get('id', ''),
+                "مستبعد من مدير البرنامج 🚫",
+                reason,
+                rep.get('contractorName', '-'),
+                rep.get('sector', 'صرف'),
+                rep.get('city', 'الرياض'),
+                rep.get('district', '-'),
+                rep.get('street', '-'),
+                rep.get('dateReport', rep.get('dateIncident', '-')),
+                age_days,
+                rep.get('ownerEntity', '-'),
+                rep.get('encroachingEntity', '-'),
+                "إحالة إلى إدارة التشغيل والصيانة / شبكة قائمة ومسلمة"
+            ]
+
+            is_even = (idx % 2 == 0)
+            row_bg = C_ZEBRA if is_even else C_WHITE
+
+            for col_i, val in enumerate(exc_row_data, start=1):
+                c = ws_exc.cell(row=r_num, column=col_i, value=clean_val(val))
+                c.font = Font(name="Segoe UI", size=9, color=C_DARK_TEXT)
+                c.fill = PatternFill(start_color=row_bg, end_color=row_bg, fill_type="solid")
+                c.border = thin_border()
+
+                if col_i in [1, 2, 6, 7, 10, 11]:
+                    c.alignment = Alignment(horizontal="center", vertical="center")
+                else:
+                    c.alignment = Alignment(horizontal="right", vertical="center")
+
+                if col_i == 2:
+                    c.font = Font(name="Segoe UI", size=9, bold=True, color=C_ROYAL_BLUE)
+                elif col_i == 3:
+                    c.fill = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type="solid")
+                    c.font = Font(name="Segoe UI", size=8.5, bold=True, color='991B1B')
+                    c.alignment = Alignment(horizontal="center", vertical="center")
+                elif col_i == 4:
+                    c.font = Font(name="Segoe UI", size=8.5, bold=True, color='9A3412')
+
+        ws_exc.freeze_panes = "A5"
+        ws_exc.auto_filter.ref = f"A4:N{len(excluded_reports) + 4}"
+        auto_fit_columns(ws_exc, max_cols=14, max_width_limit=45)
+        ws_exc.column_dimensions['A'].width = 5
+        ws_exc.column_dimensions['B'].width = 14
+        ws_exc.column_dimensions['C'].width = 22
+        ws_exc.column_dimensions['D'].width = 38
+        ws_exc.column_dimensions['E'].width = 28
+        ws_exc.column_dimensions['N'].width = 42
+
+    # -------------------------------------------------------------
+    # 5. ورقة العمل: 🌐 كافة البلاغات المعلقة بالمنظومة
+    # -------------------------------------------------------------
+    ws_all = wb.create_sheet(title=f"كافة المعلق بالشركة ({len(all_pending)})")
     setup_sheet_view(ws_all)
 
     ws_all.merge_cells("A1:Q1")
