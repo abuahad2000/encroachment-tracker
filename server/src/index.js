@@ -350,8 +350,7 @@ app.post('/api/override', async (req, res) => {
   }
 
   fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
-  // Backup file for permanent persistence
-  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+  // Backup file for permanent persistence (uses overridesBackupPath declared above)
   try {
     fs.writeFileSync(overridesBackupPath, JSON.stringify(overrides, null, 2))
   } catch (e) {}
