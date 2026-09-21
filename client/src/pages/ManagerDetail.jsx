@@ -67,15 +67,20 @@ export default function ManagerDetail() {
     return reports.filter(r => r.status === 'تحت معالجة المقاول')
   }, [reports])
 
+  const inProgressReports = useMemo(() => {
+    return reports.filter(r => r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة')
+  }, [reports])
+
   const processedReports = useMemo(() => {
-    return reports.filter(r => r.status !== 'تحت معالجة المقاول')
+    return reports.filter(r => r.status === 'تمت المعالجة')
   }, [reports])
 
   const displayedReports = useMemo(() => {
     if (activeTab === 'pending') return pendingReports
+    if (activeTab === 'in-progress') return inProgressReports
     if (activeTab === 'processed') return processedReports
     return reports
-  }, [activeTab, pendingReports, processedReports, reports])
+  }, [activeTab, pendingReports, inProgressReports, processedReports, reports])
 
   const handleExclude = async (reportId) => {
     if (!confirm('هل أنت متأكد من استبعاد هذا البلاغ من نطاق مشاريع مدير البرنامج؟')) return
@@ -197,11 +202,15 @@ export default function ManagerDetail() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-center min-w-[100px]">
-              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 block">البلاغات المعلقة</span>
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-center min-w-[90px]">
+              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 block">معلقة (المقاول)</span>
               <span className="text-2xl font-bold text-amber-700 dark:text-amber-300">{pendingReports.length}</span>
             </div>
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl text-center min-w-[100px]">
+            <div className="p-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/80 rounded-xl text-center min-w-[90px]">
+              <span className="text-xs font-medium text-sky-600 dark:text-sky-400 block">تحت الإجراء</span>
+              <span className="text-2xl font-bold text-sky-700 dark:text-sky-300">{inProgressReports.length}</span>
+            </div>
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl text-center min-w-[90px]">
               <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 block">تمت المعالجة</span>
               <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{processedReports.length}</span>
             </div>
@@ -235,9 +244,23 @@ export default function ManagerDetail() {
               : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
           }`}
         >
-          <span>⏳ البلاغات المعلقة</span>
+          <span>⏳ معلقة (المقاول)</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'pending' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
             {pendingReports.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('in-progress')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+            activeTab === 'in-progress'
+              ? 'bg-sky-600 text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+          }`}
+        >
+          <span>🔄 تحت الإجراء</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'in-progress' ? 'bg-sky-800 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'}`}>
+            {inProgressReports.length}
           </span>
         </button>
 
@@ -249,7 +272,7 @@ export default function ManagerDetail() {
               : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
           }`}
         >
-          <span>✅ البلاغات التي تمت معالجتها</span>
+          <span>✅ تمت المعالجة</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${activeTab === 'processed' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
             {processedReports.length}
           </span>

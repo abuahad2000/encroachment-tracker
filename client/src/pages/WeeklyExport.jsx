@@ -25,23 +25,20 @@ export default function WeeklyExport() {
       })
   }, [])
 
-  // 1. حسابات البطاقات الأربع المطلوبة:
+  // 1. حسابات البطاقات الإحصائية:
   const stats = useMemo(() => {
     // جميع البلاغات المرتبطة باسم مدير برنامج بكل حالاتها
     const assignedReports = reports.filter(r => r.matched && r.project && r.project.programManager && !r.excluded)
-    // إجمالي البلاغات
     const totalAssigned = assignedReports.length
-    // البلاغات التي تم معالجتها من جميع مدراء البرنامج
+    const pending = assignedReports.filter(r => r.status === 'تحت معالجة المقاول').length
+    const inProgress = assignedReports.filter(r => r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة').length
     const processed = assignedReports.filter(r => r.status === 'تمت المعالجة').length
-    // قيد المعالجة (عدد البلاغات المعلقة على مدراء البرنامج)
-    const pending = assignedReports.filter(r => r.status !== 'تمت المعالجة').length
-    // المستبعدة في ملف البلاغات
     const excluded = reports.filter(r => r.excluded).length
 
-    return { totalAssigned, processed, pending, excluded }
+    return { totalAssigned, pending, inProgress, processed, excluded }
   }, [reports])
 
-  // 2. تجميع المقاولين وعدد البلاغات المعلقة عليهم والمرتبطة بمدراء البرامج:
+  // 2. تجميع المقاولين وعدد البلاغات المعلقة وتحت الإجراء:
   const contractorsList = useMemo(() => {
     const assignedReports = reports.filter(r => r.matched && r.project && r.project.programManager && !r.excluded)
     const map = {}
@@ -58,6 +55,7 @@ export default function WeeklyExport() {
           name: cName,
           total: 0,
           pending: 0,
+          inProgress: 0,
           processed: 0,
           managers: new Set()
         }
@@ -66,8 +64,10 @@ export default function WeeklyExport() {
       map[cName].total++
       if (r.status === 'تحت معالجة المقاول') {
         map[cName].pending++
-      } else {
+      } else if (r.status === 'تمت المعالجة') {
         map[cName].processed++
+      } else {
+        map[cName].inProgress++
       }
       if (mgr) map[cName].managers.add(mgr)
     })
@@ -77,7 +77,7 @@ export default function WeeklyExport() {
         ...c,
         managersList: Array.from(c.managers).join('، ')
       }))
-      .sort((a, b) => b.pending - a.pending || b.total - a.total)
+      .sort((a, b) => b.pending - a.pending || b.inProgress - a.inProgress || b.total - a.total)
   }, [reports])
 
   // أعلى قيمة بلاغات معلقة على المدراء لحساب نسبة الرسم البياني
@@ -217,42 +217,51 @@ export default function WeeklyExport() {
           </p>
         </div>
 
-        {/* 1. البطاقات الإحصائية الأربع الرئيسية */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. البطاقات الإحصائية الرئيسية */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           {/* إجمالي البلاغات */}
-          <div className="text-center p-5 bg-blue-50 rounded-2xl border border-blue-200 shadow-sm">
-            <span className="text-xs font-extrabold text-blue-700 block mb-1">إجمالي البلاغات المسندة</span>
-            <div className="text-4xl font-black text-blue-800 my-1">
+          <div className="text-center p-4 bg-blue-50 rounded-2xl border border-blue-200 shadow-sm">
+            <span className="text-xs font-extrabold text-blue-700 block mb-1">إجمالي المسندة</span>
+            <div className="text-3xl font-black text-blue-800 my-1">
               {stats.totalAssigned.toLocaleString('ar-SA')}
             </div>
-            <p className="text-[11px] text-blue-600 font-medium">لجميع مدراء البرامج بكافة الحالات</p>
+            <p className="text-[10px] text-blue-600 font-medium">مشاريع جارية معتمدة</p>
+          </div>
+
+          {/* المعلقة (تحت المقاول) */}
+          <div className="text-center p-4 bg-amber-50 rounded-2xl border border-amber-200 shadow-sm">
+            <span className="text-xs font-extrabold text-amber-700 block mb-1">المعلقة (المقاول)</span>
+            <div className="text-3xl font-black text-amber-800 my-1">
+              {stats.pending.toLocaleString('ar-SA')}
+            </div>
+            <p className="text-[10px] text-amber-600 font-medium">تحت معالجة المقاول ⏳</p>
+          </div>
+
+          {/* تحت الإجراء */}
+          <div className="text-center p-4 bg-sky-50 rounded-2xl border border-sky-200 shadow-sm">
+            <span className="text-xs font-extrabold text-sky-700 block mb-1">تحت الإجراء</span>
+            <div className="text-3xl font-black text-sky-800 my-1">
+              {stats.inProgress.toLocaleString('ar-SA')}
+            </div>
+            <p className="text-[10px] text-sky-600 font-medium">متابعات واعتماد الجهات 🔄</p>
           </div>
 
           {/* المعالجة */}
-          <div className="text-center p-5 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm">
-            <span className="text-xs font-extrabold text-emerald-700 block mb-1">البلاغات المعالجة</span>
-            <div className="text-4xl font-black text-emerald-800 my-1">
+          <div className="text-center p-4 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm">
+            <span className="text-xs font-extrabold text-emerald-700 block mb-1">تمت المعالجة</span>
+            <div className="text-3xl font-black text-emerald-800 my-1">
               {stats.processed.toLocaleString('ar-SA')}
             </div>
-            <p className="text-[11px] text-emerald-600 font-medium">التي تم إغلاقها ومعالجتها بنجاح</p>
-          </div>
-
-          {/* قيد المعالجة (المعلقة) */}
-          <div className="text-center p-5 bg-amber-50 rounded-2xl border border-amber-200 shadow-sm">
-            <span className="text-xs font-extrabold text-amber-700 block mb-1">قيد المعالجة (المعلقة)</span>
-            <div className="text-4xl font-black text-amber-800 my-1">
-              {stats.pending.toLocaleString('ar-SA')}
-            </div>
-            <p className="text-[11px] text-amber-600 font-medium">المعلقة حالياً على مدراء البرامج</p>
+            <p className="text-[10px] text-emerald-600 font-medium">معالجة ومغلقة بالمشاريع ✅</p>
           </div>
 
           {/* المستبعدة */}
-          <div className="text-center p-5 bg-red-50 rounded-2xl border border-red-200 shadow-sm">
-            <span className="text-xs font-extrabold text-red-700 block mb-1">المستبعدة من ملف البلاغات</span>
-            <div className="text-4xl font-black text-red-800 my-1">
+          <div className="text-center p-4 bg-red-50 rounded-2xl border border-red-200 shadow-sm col-span-2 sm:col-span-1">
+            <span className="text-xs font-extrabold text-red-700 block mb-1">المستبعدة من المشاريع</span>
+            <div className="text-3xl font-black text-red-800 my-1">
               {stats.excluded.toLocaleString('ar-SA')}
             </div>
-            <p className="text-[11px] text-red-600 font-medium">خارج النطاق أو تتبع التشغيل والصيانة</p>
+            <p className="text-[10px] text-red-600 font-medium">خارج النطاق / تشغيل وصيانة</p>
           </div>
         </div>
 
@@ -347,9 +356,10 @@ export default function WeeklyExport() {
                 <tr>
                   <th className="px-4 py-3 whitespace-nowrap">اسم المقاول</th>
                   <th className="px-4 py-3 whitespace-nowrap">مدير البرنامج المرتبط</th>
-                  <th className="px-4 py-3 text-center whitespace-nowrap">البلاغات المعلقة</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">معلقة (المقاول)</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">تحت الإجراء</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">تمت المعالجة</th>
-                  <th className="px-4 py-3 text-center whitespace-nowrap">إجمالي البلاغات</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">إجمالي النشط</th>
                   <th className="px-4 py-3 whitespace-nowrap">مؤشر الإنجاز</th>
                 </tr>
               </thead>
@@ -368,16 +378,25 @@ export default function WeeklyExport() {
                         <span className={`inline-block px-2.5 py-0.5 rounded-full font-black text-xs ${
                           c.pending > 0
                             ? 'bg-amber-100 text-amber-800'
-                            : 'bg-emerald-100 text-emerald-800'
+                            : 'bg-gray-100 text-gray-600'
                         }`}>
                           {c.pending}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full font-black text-xs ${
+                          c.inProgress > 0
+                            ? 'bg-sky-100 text-sky-800'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {c.inProgress}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap font-bold text-emerald-700">
                         {c.processed}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap font-black text-blue-700">
-                        {c.total}
+                        {c.pending + c.inProgress}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">

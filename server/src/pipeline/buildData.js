@@ -142,16 +142,18 @@ export async function buildData() {
 export function calculateStats(reports, projects) {
   // البلاغات المسندة بنجاح إلى مشروع ومدير برنامج
   const assigned = reports.filter(r => r.matched && r.project && !r.excluded)
-  // إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (تحت معالجة المقاول فقط)
-  const totalActive = assigned.filter(r => r.status === 'تحت معالجة المقاول')
-  // التي تعتبر معالجة (كافة الحالات الأخرى بخلاف تحت معالجة المقاول)
-  const processed = assigned.filter(r => r.status !== 'تحت معالجة المقاول')
-  // المستبعدة من ملف البلاغات
+  // 1. إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (تحت معالجة المقاول فقط)
+  const pending = assigned.filter(r => r.status === 'تحت معالجة المقاول')
+  // 2. بلاغات تحت الإجراء (لا تنطبق عليها تحت معالجة المقاول وليست تمت المعالجة)
+  const inProgress = assigned.filter(r => r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة')
+  // 3. البلاغات التي تمت معالجتها
+  const processed = assigned.filter(r => r.status === 'تمت المعالجة')
+  // 4. المستبعدة من ملف البلاغات
   const excluded = reports.filter(r => r.excluded)
 
-  const underProcessing = totalActive
+  const underProcessing = pending
 
-  const ageDays = totalActive
+  const ageDays = pending
     .filter(r => r.ageDays >= 0)
     .map(r => r.ageDays)
     .sort((a, b) => a - b)
@@ -162,7 +164,7 @@ export function calculateStats(reports, projects) {
   }
 
   const topManagers = {}
-  for (const r of totalActive) {
+  for (const r of pending) {
     if (r.project?.programManager) {
       topManagers[r.project.programManager] = (topManagers[r.project.programManager] || 0) + 1
     }
@@ -170,11 +172,13 @@ export function calculateStats(reports, projects) {
 
   return {
     totalReports: reports.length,
-    totalActive: totalActive.length,
+    totalActive: pending.length,
+    pendingCount: pending.length,
+    inProgressCount: inProgress.length,
+    processedCount: processed.length,
     assignedCount: assigned.length,
     excludedCount: excluded.length,
-    matchedReports: totalActive.length,
-    processedCount: processed.length,
+    matchedReports: pending.length,
     underProcessingCount: underProcessing.length,
     archivedCount: processed.length,
     avgDelay: ageDays.length > 0 ? Math.round(ageDays.reduce((a, b) => a + b) / ageDays.length) : 0,
@@ -221,6 +225,7 @@ export function createManagersData(projects, reports) {
         projects: [],
         reports: [],
         pendingReports: [],
+        inProgressReports: [],
         processedReports: []
       }
     }
@@ -235,8 +240,10 @@ export function createManagersData(projects, reports) {
         managers[mgr].reports.push(report)
         if (report.status === 'تحت معالجة المقاول') {
           managers[mgr].pendingReports.push(report)
-        } else {
+        } else if (report.status === 'تمت المعالجة') {
           managers[mgr].processedReports.push(report)
+        } else {
+          managers[mgr].inProgressReports.push(report)
         }
       }
     }
@@ -256,6 +263,7 @@ export function createManagersData(projects, reports) {
       deliveredProjects: m.projects.filter(p => p.status === 'مسلم ابتدائي').length,
       totalProjects: m.projects.length,
       pendingReportsCount: m.pendingReports.length,
+      inProgressReportsCount: m.inProgressReports.length,
       processedReportsCount: m.processedReports.length,
       activeReports: m.pendingReports.length, // التوافق مع الحقول السابقة
       totalReportsCount: m.reports.length,
@@ -269,7 +277,7 @@ export function createManagersData(projects, reports) {
         contractor: p.contractor
       }))
     }
-  }).sort((a, b) => b.pendingReportsCount - a.pendingReportsCount)
+  }).sort((a, b) => (b.pendingReportsCount + b.inProgressReportsCount) - (a.pendingReportsCount + a.inProgressReportsCount) || b.pendingReportsCount - a.pendingReportsCount)
 }
 
 // Run if called directly from CLI

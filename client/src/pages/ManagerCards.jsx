@@ -42,6 +42,7 @@ export default function ManagerCards() {
   }
 
   const totalPending = managers.reduce((sum, m) => sum + (m.pendingReportsCount || m.activeReports || 0), 0)
+  const totalInProgress = managers.reduce((sum, m) => sum + (m.inProgressReportsCount || 0), 0)
   const totalProcessed = managers.reduce((sum, m) => sum + (m.processedReportsCount || 0), 0)
 
   return (
@@ -54,18 +55,22 @@ export default function ManagerCards() {
             <span>لوحة مدراء البرامج ({managers.length} مدراء)</span>
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            متابعة حية لتوزيع بلاغات التعدي المعلقة والمعالجة على مسؤولي البرامج الرأسمالية بالرياض والمحافظات
+            متابعة حية لتوزيع بلاغات التعدي المعلقة وتحت الإجراء والمعالجة على مسؤولي البرامج الرأسمالية بالرياض والمحافظات
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
-            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium block">إجمالي المعلقة</span>
-            <span className="text-xl font-bold text-amber-700 dark:text-amber-300">{totalPending}</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="px-3.5 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block">المعلقة (المقاول)</span>
+            <span className="text-lg sm:text-xl font-bold text-amber-700 dark:text-amber-300">{totalPending}</span>
           </div>
-          <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium block">إجمالي المعالجة</span>
-            <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{totalProcessed}</span>
+          <div className="px-3.5 py-2 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl text-center">
+            <span className="text-[11px] text-sky-600 dark:text-sky-400 font-medium block">تحت الإجراء</span>
+            <span className="text-lg sm:text-xl font-bold text-sky-700 dark:text-sky-300">{totalInProgress}</span>
+          </div>
+          <div className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block">المعالجة</span>
+            <span className="text-lg sm:text-xl font-bold text-emerald-700 dark:text-emerald-300">{totalProcessed}</span>
           </div>
         </div>
       </div>
@@ -101,15 +106,19 @@ export default function ManagerCards() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredManagers.map(mgr => {
           const pendingCount = mgr.pendingReportsCount ?? mgr.activeReports ?? 0
+          const inProgressCount = mgr.inProgressReportsCount ?? 0
           const processedCount = mgr.processedReportsCount ?? 0
           const hasPending = pendingCount > 0
+          const hasInProgress = inProgressCount > 0
 
           return (
             <Link key={mgr.id} to={`/managers/${mgr.id}`}>
               <div className={`p-5 rounded-2xl bg-white dark:bg-gray-800 border transition-all duration-200 hover:shadow-xl cursor-pointer ${
                 hasPending
                   ? 'border-amber-200 dark:border-amber-800/60 shadow-sm hover:border-amber-400'
-                  : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-primary-400'
+                  : hasInProgress
+                    ? 'border-sky-200 dark:border-sky-800/60 shadow-sm hover:border-sky-400'
+                    : 'border-gray-200 dark:border-gray-700 shadow-sm hover:border-primary-400'
               }`}>
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-3">
@@ -123,31 +132,46 @@ export default function ManagerCards() {
                     </span>
                   </div>
 
-                  {/* Pending Badge */}
-                  <div className={`px-3 py-1 rounded-xl text-center font-bold text-xs ${
-                    hasPending
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                  }`}>
-                    <span className="block text-[10px] font-normal">المعلقة</span>
-                    <span className="text-base">{pendingCount}</span>
+                  {/* Badges */}
+                  <div className="flex flex-col gap-1 items-end">
+                    {pendingCount > 0 && (
+                      <div className="px-2.5 py-0.5 rounded-lg text-center font-bold text-xs bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                        <span>{pendingCount} معلقة</span>
+                      </div>
+                    )}
+                    {inProgressCount > 0 && (
+                      <div className="px-2.5 py-0.5 rounded-lg text-center font-bold text-xs bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200 border border-sky-300 dark:border-sky-700">
+                        <span>{inProgressCount} إجراء</span>
+                      </div>
+                    )}
+                    {!hasPending && !hasInProgress && (
+                      <div className="px-2.5 py-0.5 rounded-lg text-center font-bold text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                        <span>مكتمل ✅</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Metrics */}
-                <div className="grid grid-cols-3 gap-2 my-4 p-2.5 bg-gray-50 dark:bg-gray-900/60 rounded-xl text-center text-xs">
+                <div className="grid grid-cols-4 gap-1.5 my-4 p-2.5 bg-gray-50 dark:bg-gray-900/60 rounded-xl text-center text-xs">
                   <div>
-                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5">المشاريع</span>
-                    <span className="font-bold text-blue-600 dark:text-blue-400">{mgr.activeProjects || 0} جاري</span>
+                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5 text-[10px]">المشاريع</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400">{mgr.activeProjects || 0}</span>
                   </div>
-                  <div className="border-r border-l border-gray-200 dark:border-gray-700">
-                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5">المعلقة</span>
-                    <span className={`font-bold ${hasPending ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                  <div className="border-r border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5 text-[10px]">المعلقة</span>
+                    <span className={`font-bold ${hasPending ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'}`}>
                       {pendingCount}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5">المعالجة</span>
+                  <div className="border-r border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5 text-[10px]">الإجراء</span>
+                    <span className={`font-bold ${hasInProgress ? 'text-sky-600 dark:text-sky-400' : 'text-gray-500'}`}>
+                      {inProgressCount}
+                    </span>
+                  </div>
+                  <div className="border-r border-gray-200 dark:border-gray-700">
+                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5 text-[10px]">المعالجة</span>
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">{processedCount}</span>
                   </div>
                 </div>

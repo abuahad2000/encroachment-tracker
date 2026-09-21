@@ -28,41 +28,52 @@ export default function MapView() {
       })
   }, [])
 
-  // Icon for pending encroachment reports (Eye-catching red/amber marker)
-  const reportIcon = L.divIcon({
-    className: 'custom-report-pin',
-    html: `
-      <div style="
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        border: 2px solid #ffffff;
-        border-radius: 50%;
-        width: 24px;
-        height: 24px;
-        box-shadow: 0 0 12px rgba(239, 68, 68, 0.8), 0 2px 4px rgba(0,0,0,0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 11px;
-        font-weight: bold;
-        cursor: pointer;
-        animation: pulse 2s infinite;
-      ">
-        ⚠️
-      </div>
-    `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -14]
-  })
+  // Icon for pending encroachment reports (Amber pin for contractor, Sky pin for in-progress)
+  const getReportIcon = (status) => {
+    const isContractorPending = status === 'تحت معالجة المقاول'
+    const bg = isContractorPending
+      ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+      : 'linear-gradient(135deg, #0284c7, #0369a1)'
+    const symbol = isContractorPending ? '⚠️' : '🔄'
+    const shadow = isContractorPending
+      ? '0 0 12px rgba(239, 68, 68, 0.8), 0 2px 4px rgba(0,0,0,0.3)'
+      : '0 0 12px rgba(2, 132, 199, 0.8), 0 2px 4px rgba(0,0,0,0.3)'
 
-  // Pending matched encroachment reports with valid coordinates
+    return L.divIcon({
+      className: 'custom-report-pin',
+      html: `
+        <div style="
+          background: ${bg};
+          border: 2px solid #ffffff;
+          border-radius: 50%;
+          width: 24px;
+          height: 24px;
+          box-shadow: ${shadow};
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+          cursor: pointer;
+          animation: pulse 2s infinite;
+        ">
+          ${symbol}
+        </div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12],
+      popupAnchor: [0, -14]
+    })
+  }
+
+  // Active matched encroachment reports with valid coordinates (both under contractor and in-progress)
   const pendingReports = useMemo(() => {
     return (reports || []).filter(r =>
       !r.excluded &&
       r.matched &&
       r.project &&
-      r.status === 'تحت معالجة المقاول' &&
+      r.status !== 'تمت المعالجة' &&
       r.longitude &&
       r.latitude &&
       r.longitude !== 0 &&
@@ -397,19 +408,28 @@ export default function MapView() {
           {displayedReportPins.map(r => {
             const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
 
+            const isContractorPending = r.status === 'تحت معالجة المقاول'
+
             return (
               <Marker
                 key={`report-pin-${r.id}`}
                 position={[r.latitude, r.longitude]}
-                icon={reportIcon}
+                icon={getReportIcon(r.status)}
               >
                 <Popup>
                   <div style={{ direction: 'rtl', textAlign: 'right', fontFamily: 'sans-serif', minWidth: '240px', padding: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ background: '#fee2e2', color: '#991b1b', fontSize: '11px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>
-                        ⚠️ بلاغ تعدي معلق #{r.id}
+                      <span style={{
+                        background: isContractorPending ? '#fee2e2' : '#e0f2fe',
+                        color: isContractorPending ? '#991b1b' : '#075985',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        padding: '2px 8px',
+                        borderRadius: '10px'
+                      }}>
+                        {isContractorPending ? `⚠️ معلق (المقاول) #${r.id}` : `🔄 تحت الإجراء #${r.id}`}
                       </span>
-                      <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 'bold' }}>
+                      <span style={{ fontSize: '10px', color: isContractorPending ? '#dc2626' : '#0284c7', fontWeight: 'bold' }}>
                         {r.ageDays} يوم تأخير
                       </span>
                     </div>

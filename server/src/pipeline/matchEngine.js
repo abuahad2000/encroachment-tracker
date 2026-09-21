@@ -443,6 +443,13 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     if (result.excluded) {
       result.project = null
       result.matched = false
+      result.actionCategory = 'مستبعد'
+    } else if (report.status === 'تحت معالجة المقاول') {
+      result.actionCategory = 'تحت معالجة المقاول'
+    } else if (report.status === 'تمت المعالجة') {
+      result.actionCategory = 'تمت المعالجة'
+    } else {
+      result.actionCategory = 'تحت الإجراء'
     }
 
     // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند، أو من واقع نصوص البلاغ إذا كان مستبعداً
@@ -452,7 +459,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.sector = classifyReportSectorFromText(report)
     }
 
-    if (report.status !== 'تحت معالجة المقاول') {
+    if (report.status === 'تمت المعالجة') {
       result.archived = true
     }
 

@@ -160,18 +160,21 @@ export default function ReportsTable() {
 
   const tabCounts = useMemo(() => {
     const pending = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول').length
-    const processed = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول').length
+    const inProgress = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة').length
+    const processed = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تمت المعالجة').length
     const noKmz = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول' && !r.reason?.includes('spatial')).length
     const excluded = reports.filter(r => r.excluded).length
-    return { pending, processed, noKmz, excluded }
+    return { pending, inProgress, processed, noKmz, excluded }
   }, [reports])
 
   const filtered = useMemo(() => {
     let list = []
     if (activeTab === 'pending') {
       list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول')
+    } else if (activeTab === 'in-progress') {
+      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة')
     } else if (activeTab === 'processed') {
-      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول')
+      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تمت المعالجة')
     } else if (activeTab === 'no-kmz') {
       list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول' && !r.reason?.includes('spatial'))
     } else if (activeTab === 'excluded') {
@@ -243,9 +246,23 @@ export default function ReportsTable() {
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
           >
-            <span>⏳ البلاغات المعلقة</span>
+            <span>⏳ المعلقة (المقاول)</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'pending' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
               {tabCounts.pending}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('in-progress')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeTab === 'in-progress'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            }`}
+          >
+            <span>🔄 تحت الإجراء</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'in-progress' ? 'bg-sky-800 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'}`}>
+              {tabCounts.inProgress}
             </span>
           </button>
 
