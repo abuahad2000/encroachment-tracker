@@ -581,7 +581,11 @@ def main():
 
     contractors_map = {}
     for r in active_assigned:
-        c_name = r['project'].get('contractor', r.get('contractorName', 'غير محدد'))
+        if r.get('excluded') or not r.get('matched') or not r.get('project'):
+            continue
+        c_name = (r['project'].get('contractor') or r.get('contractorName') or '').strip()
+        if not c_name or c_name == '-' or c_name == 'غير محدد' or c_name.upper() == 'NULL':
+            continue
         mgr_name = r['project'].get('programManager', 'غير محدد')
         if c_name not in contractors_map:
             contractors_map[c_name] = {'pending': 0, 'in_prog': 0, 'total': 0, 'managers': set(), 'ages': [], 'statuses': {}}

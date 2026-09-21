@@ -180,6 +180,10 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
             reason.push('spatial:kml')
             break
           } else if (!hasContractor && districtMatches) {
+            // لا يتم إسناد البلاغات مجهولة المقاول (NULL) تلقائياً إلى مقاولي الأعمال المدنية / التشغيل والصيانة
+            if (isCivilWorksContractor(project.contractor)) {
+              continue
+            }
             spatialMatch = true
             confidence = 0.85
             reason.push('spatial:kml+district')
@@ -410,8 +414,23 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         project: null,
         excludedReason: override.reason || 'مستبعد من نطاق مشاريع مدير البرنامج',
         confidence: 0,
-        isMaintenance
+        isMaintenance,
+        actionCategory: 'مستبعد'
       }
+      if (override.customContractor !== undefined) {
+        result.contractorName = override.customContractor
+        result.customContractor = override.customContractor
+      }
+      if (override.customSector) {
+        result.sector = override.customSector
+      } else {
+        result.sector = classifyReportSectorFromText(report)
+      }
+      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
+      const today = new Date('2026-09-18')
+      result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      processed.push(result)
+      continue
     } else if (override?.projectId) {
       const proj = projects.find(p => String(p.id).trim() === String(override.projectId).trim())
       result = {
@@ -443,7 +462,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       }
 
       // If override has a custom contractor, but spatial matching couldn't find a project, attach to any valid project of that contractor
-      if (override?.customContractor && (!result.matched || !result.project)) {
+      if (!result.excluded && override?.customContractor && (!result.matched || !result.project)) {
         const cTarget = String(override.customContractor).trim()
         const candidateProj = activeProjects.find(p => {
           const cPName = (p.contractor || '').trim()
@@ -458,7 +477,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       }
     }
 
-    if (override?.customProgramManager) {
+    if (!result.excluded && override?.customProgramManager) {
       if (result.project) {
         result.project = {
           ...result.project,

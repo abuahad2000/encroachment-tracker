@@ -28,17 +28,38 @@ export async function buildData() {
     // 2. Load overrides & contractors config
     const overridesPath = path.join(__dirname, '../../data/overrides.json')
     const overridesBackupPath = path.join(__dirname, '../../data/overrides_backup.json')
-    let overrides = []
+    const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
+    const overridesMap = new Map()
+
+    if (fs.existsSync(overridesBackupPath)) {
+      try {
+        const b = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
+        if (Array.isArray(b)) {
+          b.forEach(o => {
+            const k = normalizeId(o.reportId)
+            if (k) overridesMap.set(k, o)
+          })
+        }
+      } catch (e) {}
+    }
+
     if (fs.existsSync(overridesPath)) {
       try {
-        overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
-      } catch (e) {
-        overrides = []
-      }
+        const p = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+        if (Array.isArray(p)) {
+          p.forEach(o => {
+            const k = normalizeId(o.reportId)
+            if (k) overridesMap.set(k, o)
+          })
+        }
+      } catch (e) {}
     }
-    if ((!overrides || overrides.length === 0) && fs.existsSync(overridesBackupPath)) {
+
+    const overrides = Array.from(overridesMap.values())
+    if (overrides.length > 0) {
       try {
-        overrides = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
+        fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
+        fs.writeFileSync(overridesBackupPath, JSON.stringify(overrides, null, 2))
       } catch (e) {}
     }
 

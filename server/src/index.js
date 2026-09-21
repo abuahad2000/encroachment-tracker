@@ -282,12 +282,39 @@ app.post('/api/override', async (req, res) => {
   const existingIndex = overrides.findIndex(o => normalizeId(o.reportId) === normalizeId(reportId))
   const entry = existingIndex >= 0 ? { ...overrides[existingIndex] } : { reportId }
 
-  if (projectId !== undefined) entry.projectId = projectId || null
-  if (excluded !== undefined) entry.excluded = !!excluded
-  if (reason !== undefined) entry.reason = reason
-  if (customContractor !== undefined) entry.customContractor = customContractor
-  if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
-  if (customSector !== undefined) entry.customSector = customSector
+  if (excluded !== undefined) {
+    entry.excluded = !!excluded
+    if (entry.excluded) {
+      entry.projectId = null
+      entry.customProgramManager = null
+      entry.reason = reason || 'مستبعد من نطاق مشاريع مدير البرنامج'
+    }
+  }
+
+  if (entry.excluded) {
+    entry.projectId = null
+    entry.customProgramManager = null
+    if (customContractor !== undefined) entry.customContractor = customContractor
+    if (customSector !== undefined) entry.customSector = customSector
+  } else {
+    if (projectId !== undefined) entry.projectId = projectId || null
+    if (reason !== undefined) entry.reason = reason
+    if (customContractor !== undefined) entry.customContractor = customContractor
+    if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
+    if (customSector !== undefined) entry.customSector = customSector
+
+    // If contractor modified and no explicit project given, find matching project for contractor
+    if (customContractor && !entry.projectId && allProjects.length > 0) {
+      const cTarget = String(customContractor).trim()
+      const foundProj = allProjects.find(p => {
+        const cPName = (p.contractor || '').trim()
+        return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
+      })
+      if (foundProj) {
+        entry.projectId = foundProj.id
+      }
+    }
+  }
   
   // Secondary persistent keys
   entry.licenseNumber = req.body.licenseNumber || existingReport?.licenseNumber || entry.licenseNumber || ''
@@ -296,18 +323,6 @@ app.post('/api/override', async (req, res) => {
   if (existingReport?.district) entry.district = existingReport.district
   entry.isLocked = true
   entry.timestamp = new Date().toISOString()
-
-  // If contractor modified and no explicit project given, find matching project for contractor
-  if (customContractor && !entry.projectId && allProjects.length > 0) {
-    const cTarget = String(customContractor).trim()
-    const foundProj = allProjects.find(p => {
-      const cPName = (p.contractor || '').trim()
-      return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
-    })
-    if (foundProj) {
-      entry.projectId = foundProj.id
-    }
-  }
 
   if (existingIndex >= 0) {
     overrides[existingIndex] = entry
@@ -330,34 +345,48 @@ app.post('/api/override', async (req, res) => {
       const reports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
       const rIdx = reports.findIndex(r => normalizeId(r.id) === normalizeId(reportId))
       if (rIdx >= 0) {
-        if (customContractor !== undefined) {
-          reports[rIdx].contractorName = customContractor
-          reports[rIdx].customContractor = customContractor
-          reports[rIdx].isLocked = true
-          reports[rIdx].lockedContractor = true
-        }
-        if (entry.projectId) {
-          const proj = allProjects.find(p => String(p.id).trim() === String(entry.projectId).trim())
-          if (proj) {
-            reports[rIdx].project = { ...proj }
-            reports[rIdx].matched = true
-            reports[rIdx].excluded = false
-            const name = proj.name || ''
-            const sub = proj.subProgram || ''
-            reports[rIdx].sector = customSector || ((name.includes('صرف') || sub.includes('صرف')) ? 'صرف' : 'مياه')
+        if (entry.excluded) {
+          reports[rIdx].excluded = true
+          reports[rIdx].matched = false
+          reports[rIdx].project = null
+          reports[rIdx].excludedReason = entry.reason || reason || 'مستبعد من نطاق مشاريع مدير البرنامج'
+          reports[rIdx].actionCategory = 'مستبعد'
+          if (customContractor !== undefined) {
+            reports[rIdx].contractorName = customContractor
+            reports[rIdx].customContractor = customContractor
           }
-        } else if (customSector) {
-          reports[rIdx].sector = customSector
-        }
-        if (customProgramManager && reports[rIdx].project) {
-          reports[rIdx].project.programManager = customProgramManager
-        }
-        if (excluded !== undefined) {
-          reports[rIdx].excluded = !!excluded
-          if (excluded) {
-            reports[rIdx].matched = false
-            reports[rIdx].project = null
-            reports[rIdx].excludedReason = reason || 'مستبعد من نطاق مشاريع مدير البرنامج'
+          if (customSector !== undefined) {
+            reports[rIdx].sector = customSector
+          }
+        } else {
+          reports[rIdx].excluded = false
+          if (customContractor !== undefined) {
+            reports[rIdx].contractorName = customContractor
+            reports[rIdx].customContractor = customContractor
+            reports[rIdx].isLocked = true
+            reports[rIdx].lockedContractor = true
+          }
+          if (entry.projectId) {
+            const proj = allProjects.find(p => String(p.id).trim() === String(entry.projectId).trim())
+            if (proj) {
+              reports[rIdx].project = { ...proj }
+              reports[rIdx].matched = true
+              const name = proj.name || ''
+              const sub = proj.subProgram || ''
+              reports[rIdx].sector = customSector || ((name.includes('صرف') || sub.includes('صرف')) ? 'صرف' : 'مياه')
+            }
+          } else if (customSector) {
+            reports[rIdx].sector = customSector
+          }
+          if (customProgramManager && reports[rIdx].project) {
+            reports[rIdx].project.programManager = customProgramManager
+          }
+          if (reports[rIdx].status === 'تحت معالجة المقاول') {
+            reports[rIdx].actionCategory = 'تحت معالجة المقاول'
+          } else if (reports[rIdx].status === 'تمت المعالجة') {
+            reports[rIdx].actionCategory = 'تمت المعالجة'
+          } else {
+            reports[rIdx].actionCategory = 'تحت الإجراء'
           }
         }
         fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2))
