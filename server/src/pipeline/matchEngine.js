@@ -230,29 +230,27 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
           ]
           const isAswadContractor = matchContractor(report.contractorName, effectiveAswadContractors)
 
-          if (isAswadProject && isAswadContractor) {
-            confidence = Math.max(confidence, 0.85)
-            reason.push('contractor:aswad_exception')
-          } else {
-            // شرط صارم: تطابق الحي إلزامي للمقاول!
-            // بعض المقاولين يعملون بمشاريع أخرى تتبع التشغيل والصيانة
-            const districtMatched = matchDistrict(report.district, project.scope)
+          // شرط صارم: فحص تطابق الحي/النطاق أولاً بدقة عالية لربط البلاغ بمدير البرنامج المعني بنطاقه
+          const districtMatched = matchDistrict(report.district, project.scope)
 
-            if (districtMatched) {
-              const fullText = normalizeArabic(`${report.description} ${report.centerComment} ${report.licenseNumber}`)
-              const normProj = normalizeArabic(project.name)
-              const hasProjRef = (project.operationNumber && fullText.includes(project.operationNumber)) ||
-                                 (project.po && fullText.includes(project.po)) ||
-                                 fullText.includes(normProj)
+          if (districtMatched) {
+            const fullText = normalizeArabic(`${report.description} ${report.centerComment} ${report.licenseNumber}`)
+            const normProj = normalizeArabic(project.name)
+            const hasProjRef = (project.operationNumber && fullText.includes(project.operationNumber)) ||
+                               (project.po && fullText.includes(project.po)) ||
+                               fullText.includes(normProj)
 
-              if (hasProjRef) {
-                confidence = Math.max(confidence, 0.90)
-                reason.push('contractor+district+proj_ref')
-              } else {
-                confidence = Math.max(confidence, 0.75)
-                reason.push('contractor+district')
-              }
+            if (hasProjRef) {
+              confidence = Math.max(confidence, 0.95)
+              reason.push('contractor+district+proj_ref')
+            } else {
+              confidence = Math.max(confidence, 0.92)
+              reason.push('contractor+district')
             }
+          } else if (isAswadProject && isAswadContractor) {
+            // استثناء الأسود فقط عند عدم تطابق نطاق حي مخصص لمشروع آخر لنفس المقاول
+            confidence = Math.max(confidence, 0.78)
+            reason.push('contractor:aswad_exception')
           }
         }
       }
@@ -385,23 +383,18 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     project._kmzFeatures = ongoingFeatures.filter(f => matchProjectToFeature(project, f))
   }
 
-  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
+  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
 
   for (const report of reports) {
     const isMaintenance = isMaintenanceReport(report)
     const rIdNorm = normalizeId(report.id)
     const rLic = String(report.licenseNumber || '').trim()
 
-    // Find override by normalized ID, secondary license number, or exact coordinates
+    // Find override by normalized ID or secondary license number
     const override = overrides?.find(o => {
       const oIdNorm = normalizeId(o.reportId)
       if (oIdNorm && rIdNorm && oIdNorm === rIdNorm) return true
       if (o.licenseNumber && rLic && String(o.licenseNumber).trim() === rLic) return true
-      if (o.latitude && o.longitude && report.latitude && report.longitude &&
-          Math.abs(Number(o.latitude) - Number(report.latitude)) < 0.0001 &&
-          Math.abs(Number(o.longitude) - Number(report.longitude)) < 0.0001) {
-        return true
-      }
       return false
     })
 
@@ -415,7 +408,8 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         excludedReason: override.reason || 'مستبعد من نطاق مشاريع مدير البرنامج',
         confidence: 0,
         isMaintenance,
-        actionCategory: 'مستبعد'
+        actionCategory: 'مستبعد',
+        isLocked: true
       }
       if (override.customContractor !== undefined) {
         result.contractorName = override.customContractor
@@ -431,18 +425,55 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
       processed.push(result)
       continue
-    } else if (override?.projectId) {
-      const proj = projects.find(p => String(p.id).trim() === String(override.projectId).trim())
+    } else if (override?.projectId || (override?.isLocked && (override?.project || override?.projectId))) {
+      let proj = null
+      if (override.projectId) {
+        proj = projects.find(p => String(p.id).trim() === String(override.projectId).trim())
+      }
+      if (!proj && override.project) {
+        proj = override.project
+      }
+      if (!proj && override.customProgramManager) {
+        proj = projects.find(p => p.programManager === override.customProgramManager)
+      }
+
       result = {
         ...report,
         matched: !!proj,
         excluded: false,
-        project: proj || null,
-        confidence: 0.95,
-        reason: override.reason || 'manual_override',
+        project: proj ? { ...proj } : null,
+        confidence: 1.0,
+        reason: override.reason || 'تثبيت وتعديل معتمد',
         isMaintenance,
         isLocked: true
       }
+      if (override.customContractor !== undefined) {
+        result.contractorName = override.customContractor
+        result.customContractor = override.customContractor
+        result.lockedContractor = true
+      }
+      if (override.customProgramManager && result.project) {
+        result.project.programManager = override.customProgramManager
+      }
+      if (override.customSector) {
+        result.sector = override.customSector
+      } else if (result.project) {
+        result.sector = getProjectSector(result.project)
+      } else {
+        result.sector = classifyReportSectorFromText(report)
+      }
+      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
+      const today = new Date('2026-09-18')
+      result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      if (report.status === 'تحت معالجة المقاول') {
+        result.actionCategory = 'تحت معالجة المقاول'
+      } else if (report.status === 'تمت المعالجة') {
+        result.actionCategory = 'تمت المعالجة'
+      } else {
+        result.actionCategory = 'تحت الإجراء'
+      }
+      processed.push(result)
+      continue
     } else {
       // Determine effective contractor before matching: if an override modified the contractor, use it directly!
       const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')

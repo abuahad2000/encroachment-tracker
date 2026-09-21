@@ -28,9 +28,10 @@ export async function buildData() {
     // 2. Load overrides & contractors config
     const overridesPath = path.join(__dirname, '../../data/overrides.json')
     const overridesBackupPath = path.join(__dirname, '../../data/overrides_backup.json')
-    const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
+    const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
     const overridesMap = new Map()
 
+    // 2.1 Load backup overrides
     if (fs.existsSync(overridesBackupPath)) {
       try {
         const b = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
@@ -43,13 +44,50 @@ export async function buildData() {
       } catch (e) {}
     }
 
+    // 2.2 Load primary overrides
     if (fs.existsSync(overridesPath)) {
       try {
         const p = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
         if (Array.isArray(p)) {
           p.forEach(o => {
             const k = normalizeId(o.reportId)
-            if (k) overridesMap.set(k, o)
+            if (k) overridesMap.set(k, { ...overridesMap.get(k), ...o })
+          })
+        }
+      } catch (e) {}
+    }
+
+    // 2.3 Auto-harvest and safeguard any user exclusions or locked assignments from existing reports.json
+    const currentReportsPath = path.join(__dirname, '../../data/generated/reports.json')
+    if (fs.existsSync(currentReportsPath)) {
+      try {
+        const currentReps = JSON.parse(fs.readFileSync(currentReportsPath, 'utf-8'))
+        if (Array.isArray(currentReps)) {
+          currentReps.forEach(r => {
+            const k = normalizeId(r.id)
+            if (!k) return
+            const isUserExcluded = r.excluded && r.excludedReason !== 'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)'
+            const isUserLocked = r.isLocked || r.lockedContractor || r.customContractor || r.customProgramManager || r.customSector || (r.reason === 'manual_override')
+
+            if (isUserExcluded || isUserLocked) {
+              const existingO = overridesMap.get(k) || {}
+              overridesMap.set(k, {
+                reportId: r.id,
+                licenseNumber: r.licenseNumber || existingO.licenseNumber || '',
+                latitude: r.latitude || existingO.latitude || null,
+                longitude: r.longitude || existingO.longitude || null,
+                district: r.district || existingO.district || '',
+                excluded: r.excluded !== undefined ? !!r.excluded : !!existingO.excluded,
+                reason: r.excludedReason || existingO.reason || r.reason || (r.excluded ? 'مستبعد من نطاق مشاريع مدير البرنامج' : 'تثبيت وتعديل معتمد'),
+                projectId: r.project?.id || existingO.projectId || null,
+                project: r.project ? { ...r.project } : (existingO.project ? { ...existingO.project } : null),
+                customContractor: r.customContractor || (r.isLocked ? r.contractorName : undefined) || existingO.customContractor,
+                customProgramManager: r.project?.programManager || existingO.customProgramManager,
+                customSector: r.sector || existingO.customSector,
+                isLocked: true,
+                timestamp: existingO.timestamp || new Date().toISOString()
+              })
+            }
           })
         }
       } catch (e) {}

@@ -247,18 +247,37 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 // Save override
 app.post('/api/override', async (req, res) => {
   const { reportId, projectId, excluded, reason, customContractor, customProgramManager, customSector } = req.body
-  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
+  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
 
   const overridesPath = path.join(__dirname, '../data/overrides.json')
-  let overrides = []
+  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+  const overridesMap = new Map()
+
+  if (fs.existsSync(overridesBackupPath)) {
+    try {
+      const b = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
+      if (Array.isArray(b)) {
+        b.forEach(o => {
+          const k = normalizeId(o.reportId)
+          if (k) overridesMap.set(k, o)
+        })
+      }
+    } catch (e) {}
+  }
 
   if (fs.existsSync(overridesPath)) {
     try {
-      overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
-    } catch (e) {
-      overrides = []
-    }
+      const p = JSON.parse(fs.readFileSync(overridesPath, 'utf-8'))
+      if (Array.isArray(p)) {
+        p.forEach(o => {
+          const k = normalizeId(o.reportId)
+          if (k) overridesMap.set(k, { ...overridesMap.get(k), ...o })
+        })
+      }
+    } catch (e) {}
   }
+
+  let overrides = Array.from(overridesMap.values())
 
   // Find existing report to capture secondary keys (license, coordinates)
   const reportsPath = path.join(__dirname, '../data/generated/reports.json')
