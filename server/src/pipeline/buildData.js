@@ -304,7 +304,7 @@ export function createManagersData(projects, reports) {
         contractor: p.contractor
       }))
     }
-  }).sort((a, b) => (b.pendingReportsCount + b.inProgressReportsCount) - (a.pendingReportsCount + a.inProgressReportsCount) || b.pendingReportsCount - a.pendingReportsCount)
+  }).sort((a, b) => b.pendingReportsCount - a.pendingReportsCount || b.inProgressReportsCount - a.inProgressReportsCount)
 }
 
 // Run if called directly from CLI

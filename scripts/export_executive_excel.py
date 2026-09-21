@@ -474,8 +474,16 @@ def main():
         {"name": "علي القحطاني", "scope": "المحافظات الشمالية - مياه وصرف", "phone": "555299813", "email": "aaalqahtani@nwc.com.sa"},
         {"name": "شاكر الحقباني", "scope": "المحافظات الجنوبية - مياه وصرف", "phone": "555022025", "email": "talnoufal@nwc.com.sa"}
     ]
+    sorted_ten_managers = sorted(
+        all_ten_managers,
+        key=lambda m: (
+            -mgr_stats_map.get(m['name'], {}).get('pending', 0),
+            -mgr_stats_map.get(m['name'], {}).get('active', 0),
+            m['name']
+        )
+    )
 
-    for idx, mgr in enumerate(all_ten_managers, start=1):
+    for idx, mgr in enumerate(sorted_ten_managers, start=1):
         ws_kpi.row_dimensions[curr_row].height = 22
         st = mgr_stats_map.get(mgr['name'], {
             'pending': 0, 'in_prog': 0, 'proc': 0, 'active': 0,
