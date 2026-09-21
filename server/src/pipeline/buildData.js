@@ -142,14 +142,14 @@ export async function buildData() {
 export function calculateStats(reports, projects) {
   // البلاغات المسندة بنجاح إلى مشروع ومدير برنامج
   const assigned = reports.filter(r => r.matched && r.project && !r.excluded)
-  // إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (غير معالجة)
-  const totalActive = assigned.filter(r => r.status !== 'تمت المعالجة')
-  // التي تمت معالجتها
-  const processed = assigned.filter(r => r.status === 'تمت المعالجة')
+  // إجمالي البلاغات النشطة المعلقة لجميع مدراء البرامج (تحت معالجة المقاول فقط)
+  const totalActive = assigned.filter(r => r.status === 'تحت معالجة المقاول')
+  // التي تعتبر معالجة (كافة الحالات الأخرى بخلاف تحت معالجة المقاول)
+  const processed = assigned.filter(r => r.status !== 'تحت معالجة المقاول')
   // المستبعدة من ملف البلاغات
   const excluded = reports.filter(r => r.excluded)
 
-  const underProcessing = assigned.filter(r => r.status === 'تحت معالجة المقاول')
+  const underProcessing = totalActive
 
   const ageDays = totalActive
     .filter(r => r.ageDays >= 0)
@@ -233,10 +233,10 @@ export function createManagersData(projects, reports) {
       const mgr = report.project.programManager
       if (managers[mgr]) {
         managers[mgr].reports.push(report)
-        if (report.status === 'تمت المعالجة') {
-          managers[mgr].processedReports.push(report)
-        } else {
+        if (report.status === 'تحت معالجة المقاول') {
           managers[mgr].pendingReports.push(report)
+        } else {
+          managers[mgr].processedReports.push(report)
         }
       }
     }

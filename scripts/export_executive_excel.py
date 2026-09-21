@@ -160,13 +160,13 @@ def main():
     with open(STATS_FILE, 'r', encoding='utf-8') as f:
         stats_data = json.load(f)
 
-    # تصفية البلاغات المعلقة المعتمدة للمشاريع الجارية (49 بلاغ)
-    pending_assigned = [r for r in all_reports if r.get('matched') and r.get('project') and not r.get('excluded') and r.get('status') != 'تمت المعالجة']
+    # تصفية البلاغات المعلقة المعتمدة للمشاريع الجارية (تحت معالجة المقاول فقط)
+    pending_assigned = [r for r in all_reports if r.get('matched') and r.get('project') and not r.get('excluded') and r.get('status') == 'تحت معالجة المقاول']
     # ترتيبها حسب مدير البرنامج ثم تنازلياً حسب عمر البلاغ (الأكثر تأخيراً في البداية)
     pending_assigned.sort(key=lambda r: (r['project'].get('programManager', ''), -(r.get('ageDays') or 0)))
 
-    # كافة البلاغات المعلقة في المنظومة (2424 بلاغ)
-    all_pending = [r for r in all_reports if r.get('status') != 'تمت المعالجة']
+    # كافة البلاغات المعلقة في المنظومة (تحت معالجة المقاول فقط)
+    all_pending = [r for r in all_reports if r.get('status') == 'تحت معالجة المقاول']
     all_pending.sort(key=lambda r: -(r.get('ageDays') or 0))
 
     print(f"✓ تم حصر {len(pending_assigned)} بلاغ معلق للمشاريع الجارية لمدراء البرامج.")
@@ -470,9 +470,9 @@ def main():
     ws_kpi.column_dimensions['M'].width = 25
 
     # -------------------------------------------------------------
-    # 2. ورقة العمل الثانية: 📋 بلاغات المشاريع الجارية المعلقة (49 بلاغاً)
+    # 2. ورقة العمل الثانية: 📋 بلاغات المشاريع الجارية المعلقة
     # -------------------------------------------------------------
-    ws_rep = wb.create_sheet(title="بلاغات المشاريع الجارية (49)")
+    ws_rep = wb.create_sheet(title=f"بلاغات المشاريع الجارية ({len(pending_assigned)})")
     setup_sheet_view(ws_rep)
 
     # عنوان الورقة

@@ -159,9 +159,9 @@ export default function ReportsTable() {
   }
 
   const tabCounts = useMemo(() => {
-    const pending = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تمت المعالجة').length
-    const processed = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تمت المعالجة').length
-    const noKmz = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تمت المعالجة' && !r.reason?.includes('spatial')).length
+    const pending = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول').length
+    const processed = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول').length
+    const noKmz = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول' && !r.reason?.includes('spatial')).length
     const excluded = reports.filter(r => r.excluded).length
     return { pending, processed, noKmz, excluded }
   }, [reports])
@@ -169,11 +169,11 @@ export default function ReportsTable() {
   const filtered = useMemo(() => {
     let list = []
     if (activeTab === 'pending') {
-      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تمت المعالجة')
+      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول')
     } else if (activeTab === 'processed') {
-      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تمت المعالجة')
+      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تحت معالجة المقاول')
     } else if (activeTab === 'no-kmz') {
-      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status !== 'تمت المعالجة' && !r.reason?.includes('spatial'))
+      list = reports.filter(r => !r.excluded && r.matched && r.project && r.status === 'تحت معالجة المقاول' && !r.reason?.includes('spatial'))
     } else if (activeTab === 'excluded') {
       list = reports.filter(r => r.excluded)
     } else {

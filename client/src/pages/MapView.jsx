@@ -62,7 +62,7 @@ export default function MapView() {
       !r.excluded &&
       r.matched &&
       r.project &&
-      r.status !== 'تمت المعالجة' &&
+      r.status === 'تحت معالجة المقاول' &&
       r.longitude &&
       r.latitude &&
       r.longitude !== 0 &&

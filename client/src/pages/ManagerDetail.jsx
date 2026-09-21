@@ -64,11 +64,11 @@ export default function ManagerDetail() {
   }, [managerId])
 
   const pendingReports = useMemo(() => {
-    return reports.filter(r => r.status !== 'تمت المعالجة')
+    return reports.filter(r => r.status === 'تحت معالجة المقاول')
   }, [reports])
 
   const processedReports = useMemo(() => {
-    return reports.filter(r => r.status === 'تمت المعالجة')
+    return reports.filter(r => r.status !== 'تحت معالجة المقاول')
   }, [reports])
 
   const displayedReports = useMemo(() => {

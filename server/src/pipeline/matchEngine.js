@@ -452,7 +452,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.sector = classifyReportSectorFromText(report)
     }
 
-    if (report.status === 'تمت المعالجة') {
+    if (report.status !== 'تحت معالجة المقاول') {
       result.archived = true
     }
 

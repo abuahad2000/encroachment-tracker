@@ -64,10 +64,10 @@ export default function WeeklyExport() {
       }
 
       map[cName].total++
-      if (r.status === 'تمت المعالجة') {
-        map[cName].processed++
-      } else {
+      if (r.status === 'تحت معالجة المقاول') {
         map[cName].pending++
+      } else {
+        map[cName].processed++
       }
       if (mgr) map[cName].managers.add(mgr)
     })
