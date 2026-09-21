@@ -246,7 +246,7 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
 // Save override
 app.post('/api/override', async (req, res) => {
-  const { reportId, projectId, excluded, reason, customContractor, customProgramManager } = req.body
+  const { reportId, projectId, excluded, reason, customContractor, customProgramManager, customSector } = req.body
   const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '')
 
   const overridesPath = path.join(__dirname, '../data/overrides.json')
@@ -287,6 +287,7 @@ app.post('/api/override', async (req, res) => {
   if (reason !== undefined) entry.reason = reason
   if (customContractor !== undefined) entry.customContractor = customContractor
   if (customProgramManager !== undefined) entry.customProgramManager = customProgramManager
+  if (customSector !== undefined) entry.customSector = customSector
   
   // Secondary persistent keys
   entry.licenseNumber = req.body.licenseNumber || existingReport?.licenseNumber || entry.licenseNumber || ''
@@ -343,8 +344,10 @@ app.post('/api/override', async (req, res) => {
             reports[rIdx].excluded = false
             const name = proj.name || ''
             const sub = proj.subProgram || ''
-            reports[rIdx].sector = (name.includes('مياه') || sub.includes('مياه')) ? 'مياه' : 'صرف'
+            reports[rIdx].sector = customSector || ((name.includes('صرف') || sub.includes('صرف')) ? 'صرف' : 'مياه')
           }
+        } else if (customSector) {
+          reports[rIdx].sector = customSector
         }
         if (customProgramManager && reports[rIdx].project) {
           reports[rIdx].project.programManager = customProgramManager

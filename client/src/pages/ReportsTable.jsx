@@ -13,6 +13,7 @@ export default function ReportsTable() {
   const [contractorInput, setContractorInput] = useState('')
   const [managerInput, setManagerInput] = useState('')
   const [projectInput, setProjectInput] = useState('')
+  const [sectorInput, setSectorInput] = useState('مياه')
   const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
@@ -68,21 +69,18 @@ export default function ReportsTable() {
         })
       })
       if (res.ok) {
-        setReports(reports.map(r =>
-          r.id === reportId ? { 
-            ...r, 
-            excluded: true, 
-            matched: false, 
-            project: null, 
-            excludedReason: 'مستبعد من نطاق مشاريع مدير البرنامج' 
-          } : r
-        ))
+        setReports(reports.map(r => r.id === reportId ? { 
+          ...r, 
+          excluded: true, 
+          matched: false, 
+          project: null, 
+          excludedReason: 'مستبعد من نطاق مشاريع مدير البرنامج' 
+        } : r))
         setShowDetails(false)
-        alert('✅ تم استبعاد البلاغ من مدير البرنامج وتحديث التقرير التنفيذي بنجاح')
+        alert('تم استبعاد البلاغ وتحديث التقرير فورياً')
       }
     } catch (e) {
-      console.error('Error:', e)
-      alert('حدث خطأ أثناء استبعاد البلاغ')
+      console.error(e)
     }
   }
 
@@ -94,6 +92,11 @@ export default function ReportsTable() {
     setContractorInput(initialContractor)
     setManagerInput(report.project?.programManager || '')
     setProjectInput(report.project?.id || '')
+    
+    // Auto-detect sector: check report.sector or project
+    const detectedSector = report.sector || 
+      ((report.project?.name?.includes('صرف') || report.project?.subProgram?.includes('صرف')) ? 'صرف' : 'مياه')
+    setSectorInput(detectedSector)
   }
 
   const handleSaveEdit = async () => {
@@ -106,7 +109,8 @@ export default function ReportsTable() {
         customContractor: contractorInput.trim(),
         customProgramManager: managerInput.trim(),
         projectId: projectInput ? projectInput : undefined,
-        reason: 'تعديل وتثبيت المقاول ومدير البرنامج'
+        customSector: sectorInput,
+        reason: 'تعديل وتثبيت المقاول ومدير البرنامج والمشروع والقطاع'
       }
 
       const res = await fetch('/api/override', {
@@ -117,7 +121,6 @@ export default function ReportsTable() {
 
       if (res.ok) {
         const selectedProj = projectInput ? projects.find(p => String(p.id) === String(projectInput)) : editReport.project
-        const newSector = selectedProj ? ((selectedProj?.name?.includes('مياه') || selectedProj?.subProgram?.includes('مياه')) ? 'مياه' : 'صرف') : editReport.sector
 
         setReports(reports.map(r => {
           if (r.id === editReport.id) {
@@ -127,7 +130,7 @@ export default function ReportsTable() {
               customContractor: contractorInput.trim(),
               isLocked: true,
               lockedContractor: true,
-              sector: newSector,
+              sector: sectorInput,
               project: selectedProj ? {
                 ...selectedProj,
                 programManager: managerInput.trim() || selectedProj.programManager
@@ -144,7 +147,7 @@ export default function ReportsTable() {
             customContractor: contractorInput.trim(),
             isLocked: true,
             lockedContractor: true,
-            sector: newSector,
+            sector: sectorInput,
             project: selectedProj ? {
               ...selectedProj,
               programManager: managerInput.trim() || selectedProj.programManager
@@ -153,7 +156,7 @@ export default function ReportsTable() {
         }
 
         setEditReport(null)
-        alert('تم حفظ التعديلات بنجاح')
+        alert('تم حفظ وتثبيت التعديلات بنجاح وتحديث القطاع فورياً')
       }
     } catch (e) {
       console.error('Error saving edits:', e)
@@ -693,15 +696,29 @@ export default function ReportsTable() {
                 </div>
               </div>
 
-              {/* 2. قائمة مدراء البرامج المنسدلة من ملف الإكسيل */}
+              {/* 1. اختيار مدير البرنامج */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  اسم مدير البرنامج (من قائمة الإكسيل)
+                  مدير البرنامج المسند له البلاغ
                 </label>
                 <select
                   value={managerInput}
-                  onChange={e => setManagerInput(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  onChange={e => {
+                    const newMgr = e.target.value
+                    setManagerInput(newMgr)
+                    // Auto-select first project of this manager if current project doesn't belong to him
+                    const mgrProjects = projects.filter(p => p.programManager === newMgr)
+                    if (mgrProjects.length > 0) {
+                      const firstP = mgrProjects[0]
+                      setProjectInput(firstP.id)
+                      if (firstP.contractor && firstP.contractor !== '-') setContractorInput(firstP.contractor)
+                      const sec = (firstP.name?.includes('صرف') || firstP.subProgram?.includes('صرف')) ? 'صرف' : 'مياه'
+                      setSectorInput(sec)
+                    } else {
+                      setProjectInput('')
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"
                 >
                   <option value="">— اختر مدير البرنامج —</option>
                   {programManagers.map(m => (
@@ -710,32 +727,92 @@ export default function ReportsTable() {
                 </select>
               </div>
 
-              {/* 3. اختيار المشروع المسند */}
+              {/* 2. اختيار المشروع التابع لمدير البرنامج مع كشف وتحديث القطاع تلقائياً */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  المشروع المسند (اختياري)
+                  المشروع التابع لمدير البرنامج {managerInput ? `(${managerInput})` : ''}
                 </label>
                 <select
                   value={projectInput}
                   onChange={e => {
-                    setProjectInput(e.target.value)
-                    const p = projects.find(x => String(x.id) === String(e.target.value))
+                    const pId = e.target.value
+                    setProjectInput(pId)
+                    const p = projects.find(x => String(x.id) === String(pId))
                     if (p) {
                       if (p.contractor && p.contractor !== '-') setContractorInput(p.contractor)
                       if (p.programManager && p.programManager !== '-') setManagerInput(p.programManager)
+                      const isSewer = (p.name?.includes('صرف') || p.subProgram?.includes('صرف'))
+                      setSectorInput(isSewer ? 'صرف' : 'مياه')
                     }
                   }}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
                 >
-                  <option value="">— الإبقاء على المشروع الحالي ({editReport.project?.name}) —</option>
+                  <option value="">— اختر المشروع المسند —</option>
                   {projects
                     .filter(p => !managerInput || p.programManager === managerInput)
-                    .map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.scope}) - {p.programManager}
-                      </option>
-                    ))}
+                    .map(p => {
+                      const sec = (p.name?.includes('صرف') || p.subProgram?.includes('صرف')) ? 'صرف' : 'مياه'
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {sec === 'مياه' ? '💧 مياه' : '🚰 صرف'} | {p.name} ({p.scope}) - المقاول: {p.contractor}
+                        </option>
+                      )
+                    })}
                 </select>
+              </div>
+
+              {/* 3. بطاقة تحديث القطاع تلقائياً (مياه أو صرف) مع إمكانية التبديل الفوري */}
+              <div className="p-3 bg-gradient-to-l from-blue-50 to-emerald-50 dark:from-blue-950/40 dark:to-emerald-950/40 rounded-xl border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold block">
+                      تصنيف القطاع المحدث للبلاغ:
+                    </span>
+                    <span className="text-sm font-black flex items-center gap-1.5 mt-0.5">
+                      {sectorInput === 'مياه' ? (
+                        <span className="text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                          <span>💧</span>
+                          <span>مشاريع المياه</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                          <span>🚰</span>
+                          <span>مشاريع الصرف الصحي</span>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSectorInput('مياه')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                        sectorInput === 'مياه'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>💧</span>
+                      <span>مياه</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSectorInput('صرف')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                        sectorInput === 'صرف'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>🚰</span>
+                      <span>صرف</span>
+                    </button>
+                  </div>
+                </div>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 block mt-1.5">
+                  ⚡ يتم تحديد القطاع تلقائياً حسب المشروع المختار لمدير البرنامج، ويمكنك التبديل بينهما مباشرة.
+                </span>
               </div>
 
               <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex gap-3">

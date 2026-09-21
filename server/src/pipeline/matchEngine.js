@@ -493,8 +493,10 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.actionCategory = 'تحت الإجراء'
     }
 
-    // تصنيف البلاغ: مياه أو صرف صحي حسب المشروع المسند، أو من واقع نصوص البلاغ إذا كان مستبعداً
-    if (result.project) {
+    // تصنيف البلاغ: مياه أو صرف صحي حسب التعديل اليدوي أو المشروع المسند
+    if (override?.customSector) {
+      result.sector = override.customSector
+    } else if (result.project) {
       result.sector = getProjectSector(result.project)
     } else {
       result.sector = classifyReportSectorFromText(report)

@@ -12,6 +12,9 @@ export default function ManagerDetail() {
   const [showDetails, setShowDetails] = useState(false)
   const [editContractorReport, setEditContractorReport] = useState(null)
   const [contractorInput, setContractorInput] = useState('')
+  const [projectInput, setProjectInput] = useState('')
+  const [sectorInput, setSectorInput] = useState('مياه')
+  const [allProjects, setAllProjects] = useState([])
   const [savingContractor, setSavingContractor] = useState(false)
   const [projectContractors, setProjectContractors] = useState([])
 
@@ -23,6 +26,7 @@ export default function ManagerDetail() {
     ])
       .then(([managers, allReports, projectsData]) => {
         if (projectsData && Array.isArray(projectsData)) {
+          setAllProjects(projectsData)
           const contractors = Array.from(new Set(
             projectsData
               .map(p => (p.contractor || '').trim())
@@ -107,10 +111,21 @@ export default function ManagerDetail() {
     }
   }
 
+  const openEditModal = (report) => {
+    setEditContractorReport(report)
+    const effectiveContractor = report.contractorName || report.project?.contractor || ''
+    setContractorInput(effectiveContractor === 'NULL' ? '' : effectiveContractor)
+    setProjectInput(report.project?.id || '')
+    const detectedSector = report.sector || 
+      ((report.project?.name?.includes('صرف') || report.project?.subProgram?.includes('صرف')) ? 'صرف' : 'مياه')
+    setSectorInput(detectedSector)
+  }
+
   const handleSaveContractor = async () => {
     if (!editContractorReport) return
     setSavingContractor(true)
     try {
+      const chosenProj = allProjects.find(p => String(p.id) === String(projectInput))
       const res = await fetch('/api/override', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -119,7 +134,9 @@ export default function ManagerDetail() {
           licenseNumber: editContractorReport.licenseNumber || undefined,
           customContractor: contractorInput.trim(),
           customProgramManager: manager?.name || undefined,
-          reason: 'تعديل وتثبيت اسم المقاول'
+          projectId: projectInput || undefined,
+          customSector: sectorInput,
+          reason: 'تعديل وتثبيت المقاول والمشروع والقطاع'
         })
       })
       if (res.ok) {
@@ -130,7 +147,12 @@ export default function ManagerDetail() {
               contractorName: contractorInput.trim(),
               customContractor: contractorInput.trim(),
               isLocked: true,
-              lockedContractor: true
+              lockedContractor: true,
+              sector: sectorInput,
+              project: chosenProj ? {
+                ...chosenProj,
+                programManager: manager?.name || chosenProj.programManager
+              } : r.project
             }
           }
           return r
@@ -141,11 +163,16 @@ export default function ManagerDetail() {
             contractorName: contractorInput.trim(),
             customContractor: contractorInput.trim(),
             isLocked: true,
-            lockedContractor: true
+            lockedContractor: true,
+            sector: sectorInput,
+            project: chosenProj ? {
+              ...chosenProj,
+              programManager: manager?.name || chosenProj.programManager
+            } : selectedReport.project
           })
         }
         setEditContractorReport(null)
-        alert('تم حفظ وتثبيت المقاول بنجاح مع استمرار ربط البلاغ بالمشروع ومدير البرنامج')
+        alert('تم حفظ وتثبيت المقاول والمشروع وتحديث القطاع بنجاح')
       }
     } catch (e) {
       console.error('Error saving contractor:', e)
@@ -350,16 +377,18 @@ export default function ManagerDetail() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                             {effectiveContractor}
                           </span>
+                          {(r.customContractor || r.isLocked || r.lockedContractor) && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800" title="تم تثبيت المقاول يدوياً">
+                              🔒 مثبت
+                            </span>
+                          )}
                           <button
-                            onClick={() => {
-                              setEditContractorReport(r)
-                              setContractorInput(effectiveContractor === 'غير محدد' ? '' : effectiveContractor)
-                            }}
-                            title="تعديل المقاول"
+                            onClick={() => openEditModal(r)}
+                            title="تعديل المقاول والمشروع والقطاع"
                             className="text-gray-400 hover:text-blue-600 text-xs p-1"
                           >
                             ✏️
@@ -499,12 +528,11 @@ export default function ManagerDetail() {
                 <button
                   className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
                   onClick={() => {
-                    setEditContractorReport(selectedReport)
-                    setContractorInput(selectedReport.contractorName || selectedReport.project?.contractor || '')
+                    openEditModal(selectedReport)
                     setShowDetails(false)
                   }}
                 >
-                  ✏️ تعديل المقاول
+                  ✏️ تعديل المقاول والمشروع والقطاع
                 </button>
               </div>
             </div>
@@ -512,79 +540,198 @@ export default function ManagerDetail() {
         </div>
       )}
 
-      {/* Modal تعديل المقاول */}
+      {/* Modal تعديل المقاول والمشروع والقطاع */}
       {editContractorReport && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              تعديل اسم المقاول للبلاغ {editContractorReport.id}
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-              يمكنك اختيار المقاول من قائمة مشاريع الإكسيل أو كتابته أو تركه فارغاً مع بقاء البلاغ مرتبطاً بالمشروع ومدير البرنامج ({manager.name}).
-            </p>
-
-            <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  اختر المقاول من قائمة مشاريع الإكسيل
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>✏️</span>
+                  <span>تعديل المقاول والمشروع والقطاع</span>
+                </h3>
+                <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-0.5 block">
+                  بلاغ رقم {editContractorReport.id} • مدير البرنامج: {manager?.name}
+                </span>
+              </div>
+              <button
+                onClick={() => setEditContractorReport(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* 1. اختيار المشروع التابع لمدير البرنامج */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  المشروع التابع لمدير البرنامج ({manager?.name})
                 </label>
+                <select
+                  value={projectInput}
+                  onChange={e => {
+                    const pId = e.target.value
+                    setProjectInput(pId)
+                    const chosen = allProjects.find(p => String(p.id) === String(pId))
+                    if (chosen) {
+                      if (chosen.contractor && chosen.contractor !== '-') setContractorInput(chosen.contractor)
+                      const isSewer = (chosen.name?.includes('صرف') || chosen.subProgram?.includes('صرف'))
+                      setSectorInput(isSewer ? 'صرف' : 'مياه')
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
+                >
+                  <option value="">— اختر من مشاريع {manager?.name} —</option>
+                  {allProjects
+                    .filter(p => p.programManager === manager?.name)
+                    .map(p => {
+                      const sec = (p.name?.includes('صرف') || p.subProgram?.includes('صرف')) ? 'صرف' : 'مياه'
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {sec === 'مياه' ? '💧 مياه' : '🚰 صرف'} | {p.name} ({p.scope}) - المقاول: {p.contractor}
+                        </option>
+                      )
+                    })}
+                  <optgroup label="كافة مشاريع شركة المياه الوطنية الأخرى:">
+                    {allProjects
+                      .filter(p => p.programManager !== manager?.name)
+                      .map(p => {
+                        const sec = (p.name?.includes('صرف') || p.subProgram?.includes('صرف')) ? 'صرف' : 'مياه'
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {sec === 'مياه' ? '💧 مياه' : '🚰 صرف'} | {p.name} ({p.scope}) - {p.programManager}
+                          </option>
+                        )
+                      })}
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* 2. بطاقة تحديث القطاع تلقائياً بناء على المشروع مع إمكانية التبديل الفوري */}
+              <div className="p-3 bg-gradient-to-l from-blue-50 to-emerald-50 dark:from-blue-950/40 dark:to-emerald-950/40 rounded-xl border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400 font-bold block">
+                      تصنيف القطاع المحدث للبلاغ:
+                    </span>
+                    <span className="text-sm font-black flex items-center gap-1.5 mt-0.5">
+                      {sectorInput === 'مياه' ? (
+                        <span className="text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                          <span>💧</span>
+                          <span>مشاريع المياه</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                          <span>🚰</span>
+                          <span>مشاريع الصرف الصحي</span>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSectorInput('مياه')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                        sectorInput === 'مياه'
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>💧</span>
+                      <span>مياه</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSectorInput('صرف')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                        sectorInput === 'صرف'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>🚰</span>
+                      <span>صرف</span>
+                    </button>
+                  </div>
+                </div>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 block mt-1.5">
+                  ⚡ يتم تحديث القطاع تلقائياً حسب المشروع المختار لمدير البرنامج، ويمكنك التبديل بينهما يدوياً.
+                </span>
+              </div>
+
+              {/* 3. اسم المقاول */}
+              <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  اسم المقاول المعتمد للبلاغ
+                </label>
+                <input
+                  type="text"
+                  placeholder="اكتب اسم المقاول أو عدّله..."
+                  value={contractorInput}
+                  onChange={e => setContractorInput(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-850 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-bold"
+                />
+
                 <select
                   value={projectContractors.includes(contractorInput) ? contractorInput : ''}
                   onChange={e => {
                     if (e.target.value) setContractorInput(e.target.value)
                   }}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white mb-2"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-850 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >
-                  <option value="">-- اختر من قائمة مقاولي المشاريع ({projectContractors.length} مقاول) --</option>
+                  <option value="">-- أو اختر من قائمة مقاولي المشاريع ({projectContractors.length} مقاول) --</option>
                   {projectContractors.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
 
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  أو اكتب / عدّل اسم المقاول يدوياً
-                </label>
-                <input
-                  type="text"
-                  placeholder="اتركه فارغاً إذا لم يوجد مقاول..."
-                  value={contractorInput}
-                  onChange={e => setContractorInput(e.target.value)}
-                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setContractorInput('')}
-                  className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200"
-                >
-                  تفريغ (تركه فارغاً)
-                </button>
-                {editContractorReport.project?.contractor && (
+                <div className="flex gap-2 pt-1 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => setContractorInput(editContractorReport.project.contractor)}
-                    className="px-3 py-1.5 text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100"
+                    onClick={() => setContractorInput('')}
+                    className="px-2.5 py-1 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 transition"
                   >
-                    استخدام مقاول المشروع
+                    تفريغ
                   </button>
-                )}
+                  {editContractorReport.contractorName && editContractorReport.contractorName !== 'NULL' && (
+                    <button
+                      type="button"
+                      onClick={() => setContractorInput(editContractorReport.contractorName)}
+                      className="px-2.5 py-1 text-xs bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded-lg hover:bg-amber-100 border border-amber-200 dark:border-amber-800 font-semibold transition"
+                    >
+                      مقاول البلاغ الأصلي
+                    </button>
+                  )}
+                  {editContractorReport.project?.contractor && (
+                    <button
+                      type="button"
+                      onClick={() => setContractorInput(editContractorReport.project.contractor)}
+                      className="px-2.5 py-1 text-xs bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 font-semibold transition"
+                    >
+                      مقاول المشروع الحالي
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setEditContractorReport(null)}
-                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition text-sm"
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-bold hover:bg-gray-300 transition text-xs"
                 >
                   إلغاء
                 </button>
                 <button
+                  type="button"
                   onClick={handleSaveContractor}
                   disabled={savingContractor}
-                  className="flex-1 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition text-sm disabled:opacity-50"
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition text-xs disabled:opacity-50"
                 >
-                  {savingContractor ? 'جاري الحفظ...' : 'حفظ التعديل'}
+                  {savingContractor ? 'جاري الحفظ...' : 'حفظ وتثبيت التعديل'}
                 </button>
               </div>
             </div>
