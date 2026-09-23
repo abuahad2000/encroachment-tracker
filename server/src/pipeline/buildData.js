@@ -5,6 +5,7 @@ import { parseReports } from './parseReports.js'
 import { parseProjects } from './parseProjects.js'
 import { parseAllKMZ } from './parseKmz.js'
 import { processReports } from './matchEngine.js'
+import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -179,8 +180,27 @@ export async function buildData(customReportsFile = null) {
       }
     }
 
+    const enrichGovFeatures = (features) => {
+      for (const f of features) {
+        const matched = matchGovernorateFeatureToProject(f, projects)
+        if (matched) {
+          f.properties.projectId = matched.id
+          f.properties.programManager = matched.programManager || '-'
+          f.properties.projectManager = matched.projectManager || '-'
+          f.properties.contractor = matched.contractor || '-'
+          f.properties.po = matched.po || '-'
+          f.properties.status = matched.status || 'جاري'
+          f.properties.subProgram = matched.subProgram || ''
+          f.properties.scope = matched.scope || ''
+          f.properties.projectName = matched.name
+          f.properties.sector = (matched.name?.includes('صرف') || matched.subProgram?.includes('صرف')) ? 'sanitation' : 'water'
+        }
+      }
+    }
+
     enrichFeatures(geoJsonData.water?.features || [])
     enrichFeatures(geoJsonData.sanitation?.features || [])
+    enrichGovFeatures(geoJsonData.governorates?.features || [])
 
     fs.writeFileSync(
       path.join(outputDir, 'layers.json'),

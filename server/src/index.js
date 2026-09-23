@@ -159,14 +159,14 @@ app.get('/api/managers', (req, res) => {
   res.json(managers)
 })
 
-// Get layers (GeoJSON) - Only ongoing active layers
+// Get layers (GeoJSON) - Only ongoing active layers & Governorates
 app.get('/api/layers', (req, res) => {
   const layers = loadGeneratedData('layers.json')
   if (!layers) {
     return res.json({
       type: 'FeatureCollection',
       features: [],
-      stats: { water: 0, sanitation: 0, total: 0 }
+      stats: { water: 0, sanitation: 0, governorates: 0, total: 0 }
     })
   }
 
@@ -179,11 +179,16 @@ app.get('/api/layers', (req, res) => {
     ...f,
     properties: { ...f.properties, sector: 'sanitation' }
   }))
+  const governoratesFeatures = (layers.governorates?.features || []).map(f => ({
+    ...f,
+    properties: { ...f.properties, isGovernorate: true, sector: f.properties?.sector || 'governorates' }
+  }))
 
   const stats = {
     water: waterFeatures.length,
     sanitation: sanitationFeatures.length,
-    total: waterFeatures.length + sanitationFeatures.length
+    governorates: governoratesFeatures.length,
+    total: waterFeatures.length + sanitationFeatures.length + governoratesFeatures.length
   }
 
   let selectedFeatures = []
@@ -191,8 +196,10 @@ app.get('/api/layers', (req, res) => {
     selectedFeatures = waterFeatures
   } else if (sector === 'sanitation') {
     selectedFeatures = sanitationFeatures
+  } else if (sector === 'governorates') {
+    selectedFeatures = governoratesFeatures
   } else {
-    selectedFeatures = [...waterFeatures, ...sanitationFeatures]
+    selectedFeatures = [...waterFeatures, ...sanitationFeatures, ...governoratesFeatures]
   }
 
   res.json({
@@ -200,6 +207,7 @@ app.get('/api/layers', (req, res) => {
     features: selectedFeatures,
     waterFeatures,
     sanitationFeatures,
+    governoratesFeatures,
     stats
   })
 })

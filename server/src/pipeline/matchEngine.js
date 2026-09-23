@@ -1,5 +1,6 @@
 import { normalizeArabic, similarity } from './normalize.js'
 import * as turf from '@turf/turf'
+import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 
 const SIMILARITY_THRESHOLD = 0.82
 const MAINTENANCE_KEYWORDS = ['طارئ', 'انكسار', 'صيانة', 'دورية', 'إصلاح']
@@ -229,8 +230,8 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
             const cleanCity = normalizeArabic(report.city).replace('محافظة', '').trim().toLowerCase()
             const fullScope = normalizeArabic((project.scope || '') + ' ' + (project.name || '')).toLowerCase()
             const cityMatched = fullScope.includes(cleanCity) || 
-                                (cleanCity === 'الرويضة' && fullScope.includes('القويعية')) ||
-                                (cleanCity === 'مرات' && fullScope.includes('شقراء'))
+                                (cleanCity.includes('رويض') && fullScope.includes('القويعي')) ||
+                                (cleanCity.includes('مرات') && fullScope.includes('شقراء'))
 
             if (cityMatched) {
               confidence = Math.max(confidence, 0.95)
@@ -351,7 +352,8 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
   // تحضير مسبق للطبقات الجارية وحساب BBox
   const ongoingFeatures = [
     ...(geoJsonData?.water?.features || []),
-    ...(geoJsonData?.sanitation?.features || [])
+    ...(geoJsonData?.sanitation?.features || []),
+    ...(geoJsonData?.governorates?.features || [])
   ]
 
   for (const feat of ongoingFeatures) {
@@ -360,7 +362,15 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
 
   // ربط مسبق بين كل مشروع وطبقاته الجارية بـ KMZ بدقة النطاق والمرحلة
   for (const project of activeProjects) {
-    project._kmzFeatures = ongoingFeatures.filter(f => matchProjectToFeature(project, f))
+    const isGovProject = project.subProgram?.includes('المحافظات') || project.scope?.includes('محافظ')
+    if (isGovProject) {
+      project._kmzFeatures = (geoJsonData?.governorates?.features || []).filter(f => {
+        const m = matchGovernorateFeatureToProject(f, projects)
+        return m && String(m.id).trim() === String(project.id).trim()
+      })
+    } else {
+      project._kmzFeatures = ongoingFeatures.filter(f => !f.properties?.isGovernorate && matchProjectToFeature(project, f))
+    }
   }
 
   const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()

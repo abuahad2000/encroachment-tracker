@@ -1,7 +1,19 @@
 import { useEffect, useState, useMemo } from 'react'
-import { MapContainer, TileLayer, GeoJSON as GeoJSONLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, GeoJSON as GeoJSONLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+
+function MapViewUpdater({ activeTab }) {
+  const map = useMap()
+  useEffect(() => {
+    if (activeTab === 'governorates') {
+      map.flyTo([24.2, 45.8], 8, { duration: 1.2 })
+    } else {
+      map.flyTo([24.7136, 46.6753], 11, { duration: 1.2 })
+    }
+  }, [activeTab, map])
+  return null
+}
 
 export default function MapView() {
   const [rawData, setRawData] = useState(null)
@@ -99,6 +111,14 @@ export default function MapView() {
         const pName = r.project?.name || ''
         return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
       })
+    } else if (activeTab === 'governorates') {
+      pool = pool.filter(r => {
+        const isGov = r.city && !r.city.includes('الرياض')
+        const pSub = r.project?.subProgram || ''
+        const pScope = r.project?.scope || ''
+        const pMgr = r.project?.programManager || ''
+        return isGov || pSub.includes('المحافظات') || pScope.includes('محافظ') || ['فهد العنزي', 'سعيد الحارث', 'شاكر الحقباني', 'علي القحطاني'].includes(pMgr)
+      })
     }
 
     pool.forEach(r => {
@@ -137,6 +157,14 @@ export default function MapView() {
         const pName = r.project?.name || ''
         return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
       })
+    } else if (activeTab === 'governorates') {
+      list = list.filter(r => {
+        const isGov = r.city && !r.city.includes('الرياض')
+        const pSub = r.project?.subProgram || ''
+        const pScope = r.project?.scope || ''
+        const pMgr = r.project?.programManager || ''
+        return isGov || pSub.includes('المحافظات') || pScope.includes('محافظ') || ['فهد العنزي', 'سعيد الحارث', 'شاكر الحقباني', 'علي القحطاني'].includes(pMgr)
+      })
     }
 
     // 2. Manager filtering
@@ -167,6 +195,8 @@ export default function MapView() {
       list = rawData.waterFeatures || []
     } else if (activeTab === 'sanitation') {
       list = rawData.sanitationFeatures || []
+    } else if (activeTab === 'governorates') {
+      list = rawData.governoratesFeatures || []
     } else {
       list = rawData.features || []
     }
@@ -187,10 +217,20 @@ export default function MapView() {
 
   const onEachFeature = (feature, layer) => {
     const props = feature.properties || {}
-    const name = props.name || 'مشروع بدون اسم'
-    const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه')) || (props.subProgram && props.subProgram.includes('مياه'))
-    const sectorLabel = isWater ? '💧 قطاع المياه (جاري)' : '🚰 قطاع الصرف الصحي (جاري)'
-    const sectorBg = isWater ? '#0284c7' : '#059669'
+    const name = props.projectName || props.name || 'مشروع بدون اسم'
+    const isGov = props.isGovernorate || (props.subProgram && props.subProgram.includes('المحافظات'))
+    let sectorLabel = ''
+    let sectorBg = '#0284c7'
+
+    if (isGov) {
+      const isWater = props.sector === 'water' || (props.name && props.name.includes('مياه'))
+      sectorLabel = isWater ? '🏛️ نطاق المحافظات (مياه)' : '🏛️ نطاق المحافظات (صرف صحي)'
+      sectorBg = isWater ? '#d97706' : '#7c3aed'
+    } else {
+      const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه')) || (props.subProgram && props.subProgram.includes('مياه'))
+      sectorLabel = isWater ? '💧 قطاع المياه (جاري)' : '🚰 قطاع الصرف الصحي (جاري)'
+      sectorBg = isWater ? '#0284c7' : '#059669'
+    }
 
     const op = props.operationNumber ? `<div><span style="color:#64748b;font-size:11px;">رقم العملية:</span> <strong style="font-size:12px;">${props.operationNumber}</strong></div>` : ''
     const po = props.po && props.po !== '-' ? `<div><span style="color:#64748b;font-size:11px;">أمر الشراء (PO):</span> <strong style="font-size:12px;color:#1e40af;">${props.po}</strong></div>` : ''
@@ -226,6 +266,17 @@ export default function MapView() {
     if (!feature?.geometry) return {}
     if (feature.geometry.type === 'Point') return {}
 
+    if (feature.properties?.isGovernorate) {
+      const isWater = feature.properties?.sector === 'water' || feature.properties?.name?.includes('مياه')
+      return {
+        color: isWater ? '#d97706' : '#7c3aed', // Amber for water, Violet for sanitation
+        weight: 2.5,
+        opacity: 0.9,
+        fillOpacity: 0.28,
+        fillColor: isWater ? '#fbbf24' : '#a78bfa'
+      }
+    }
+
     const isWater = feature.properties?.sector === 'water' || (feature.properties?.folder && feature.properties?.folder.includes('مياه'))
 
     if (isWater) {
@@ -259,6 +310,7 @@ export default function MapView() {
 
   const waterCount = rawData?.stats?.water ?? (rawData?.waterFeatures?.length || 0)
   const sanitationCount = rawData?.stats?.sanitation ?? (rawData?.sanitationFeatures?.length || 0)
+  const governoratesCount = rawData?.stats?.governorates ?? (rawData?.governoratesFeatures?.length || 0)
   const totalCount = rawData?.stats?.total ?? (rawData?.features?.length || 0)
 
   return (
@@ -342,6 +394,20 @@ export default function MapView() {
               {sanitationCount}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('governorates')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'governorates'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            }`}
+          >
+            <span>🏛️ نطاق المحافظات</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'governorates' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
+              {governoratesCount}
+            </span>
+          </button>
         </div>
 
         {/* Encroachment Report Pin Controls */}
@@ -386,6 +452,7 @@ export default function MapView() {
       {/* Map Container */}
       <div style={{ height: '640px', borderRadius: '20px', overflow: 'hidden' }} className="shadow-2xl border border-gray-200 dark:border-gray-700 relative">
         <MapContainer center={[24.7136, 46.6753]} zoom={11} style={{ height: '100%', width: '100%' }}>
+          <MapViewUpdater activeTab={activeTab} />
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
