@@ -402,17 +402,17 @@ export default function ReportsTable() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
-              <thead className="bg-gray-50 dark:bg-gray-900/70 text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 font-bold whitespace-nowrap">
+              <thead className="bg-gray-50 dark:bg-gray-900/70 text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 font-bold">
                 <tr>
-                  <th className="px-3 py-3 text-center">رقم البلاغ</th>
-                  <th className="px-2 py-3 text-center">القطاع</th>
-                  <th className="px-3 py-3">الحي / المدينة</th>
-                  <th className="px-3 py-3">المشروع المسند</th>
-                  <th className="px-3 py-3">مدير البرنامج</th>
-                  <th className="px-3 py-3">المقاول</th>
-                  <th className="px-2 py-3 text-center">المصدر</th>
-                  <th className="px-2 py-3 text-center">التأخير</th>
-                  <th className="px-3 py-3 text-center">الإجراءات</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap w-24">رقم البلاغ</th>
+                  <th className="px-2 py-3 text-center whitespace-nowrap w-20">القطاع</th>
+                  <th className="px-3 py-3 whitespace-nowrap min-w-[140px]">الحي / المدينة</th>
+                  <th className="px-3 py-3 min-w-[280px] max-w-[420px]">المشروع المسند</th>
+                  <th className="px-3 py-3 min-w-[140px] whitespace-nowrap">مدير البرنامج</th>
+                  <th className="px-3 py-3 min-w-[180px]">المقاول</th>
+                  <th className="px-2 py-3 text-center whitespace-nowrap w-28">المصدر</th>
+                  <th className="px-2 py-3 text-center whitespace-nowrap w-20">التأخير</th>
+                  <th className="px-2 py-3 text-center whitespace-nowrap w-28">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
@@ -426,14 +426,14 @@ export default function ReportsTable() {
                                       r.reason === 'manual_override' ? '✏️ تعديل يدوي' : '❓ مطابقة'
 
                   return (
-                    <tr key={r.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-750 transition whitespace-nowrap">
+                    <tr key={r.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-750 transition">
                       {/* رقم البلاغ بدون رمز # */}
-                      <td className="px-3 py-3 font-mono font-bold text-gray-900 dark:text-white text-center text-sm">
+                      <td className="px-3 py-3 font-mono font-bold text-gray-900 dark:text-white text-center text-sm whitespace-nowrap">
                         {r.id}
                       </td>
 
                       {/* تصنيف القطاع: مياه أو صرف */}
-                      <td className="px-2 py-3 text-center">
+                      <td className="px-2 py-3 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
                           isWater
                             ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
@@ -444,8 +444,8 @@ export default function ReportsTable() {
                         </span>
                       </td>
 
-                      {/* الحي والشارع في سطر واحد */}
-                      <td className="px-3 py-3">
+                      {/* الحي والشارع */}
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span className="font-bold text-gray-900 dark:text-white">
                           {r.district || r.city}
                         </span>
@@ -456,39 +456,37 @@ export default function ReportsTable() {
                         )}
                       </td>
 
-                      {/* المشروع المسند في صف كامل */}
-                      <td className="px-3 py-3 max-w-[280px] truncate" title={r.project?.name}>
-                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                      {/* المشروع المسند كامل ومنسق بدون قص */}
+                      <td className="px-3 py-3 min-w-[280px] max-w-[420px] whitespace-normal leading-relaxed text-right" title={r.project?.name}>
+                        <span className={`font-semibold block ${r.excluded ? 'text-amber-800 dark:text-amber-300 text-xs' : 'text-gray-900 dark:text-gray-100 text-xs'}`}>
                           {r.project?.name || (r.excluded ? r.excludedReason : 'غير مسند')}
                         </span>
+                        {r.project?.operationNumber && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono block mt-0.5">
+                            {r.project.operationNumber}
+                          </span>
+                        )}
                       </td>
 
-                      {/* مدير البرنامج في سطر واحد */}
-                      <td className="px-3 py-3 font-semibold text-gray-800 dark:text-gray-200">
+                      {/* مدير البرنامج */}
+                      <td className="px-3 py-3 font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap">
                         {r.excluded ? (
-                          <span className="text-gray-400 text-[11px]">-</span>
+                          <span className="text-gray-400 text-xs">-</span>
                         ) : (
                           r.project?.programManager || '-'
                         )}
                       </td>
 
-                      {/* المقاول مع زر التعديل في سطر واحد: للبلاغات المستبعدة يظهر مقاول المشروع الأصلي بالملف مع إمكانية التعديل */}
-                      <td className="px-3 py-3">
+                      {/* المقاول */}
+                      <td className="px-3 py-3 min-w-[180px] whitespace-normal leading-snug">
                         {r.excluded ? (
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex flex-col gap-1">
                             <span className={`font-semibold ${(!r.contractorName || r.contractorName === 'NULL') ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
                               {r.contractorName && r.contractorName !== 'NULL' ? r.contractorName : 'غير محدد بالملف'}
                             </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold whitespace-nowrap">
-                              (مقاول المشروع الأصلي)
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold w-fit">
+                              مقاول الملف الأصلي
                             </span>
-                            <button
-                              onClick={() => openEditModal(r)}
-                              title="تعديل مقاول المشروع الأصلي أو إسناده"
-                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition text-xs"
-                            >
-                              ✏️
-                            </button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -496,28 +494,21 @@ export default function ReportsTable() {
                               {effectiveContractor}
                             </span>
                             {(r.customContractor || r.isLocked || r.lockedContractor) && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800" title="تم تثبيت المقاول يدوياً لهذا البلاغ ومحمي عند رفع ملفات جديدة">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800" title="تم تثبيت المقاول يدوياً لهذا البلاغ">
                                 🔒 مثبت
                               </span>
                             )}
-                            <button
-                              onClick={() => openEditModal(r)}
-                              title="تعديل المقاول ومدير البرنامج"
-                              className="text-gray-400 hover:text-blue-600 p-0.5 rounded transition"
-                            >
-                              ✏️
-                            </button>
                           </div>
                         )}
                       </td>
 
                       {/* المصدر */}
-                      <td className="px-2 py-3 text-center text-gray-500 text-[11px]">
+                      <td className="px-2 py-3 text-center text-gray-500 text-[11px] whitespace-nowrap">
                         {reasonLabel}
                       </td>
 
                       {/* التأخير */}
-                      <td className="px-2 py-3 text-center">
+                      <td className="px-2 py-3 text-center whitespace-nowrap">
                         <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
                           r.ageDays > 60 ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
                           r.ageDays > 30 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' :
@@ -527,21 +518,30 @@ export default function ReportsTable() {
                         </span>
                       </td>
 
-                      {/* الإجراءات */}
-                      <td className="px-3 py-3 text-center">
+                      {/* الإجراءات برموز مدمجة لتوفير المساحة */}
+                      <td className="px-2 py-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
-                            className="px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded transition"
+                            className="p-1.5 text-blue-600 hover:bg-blue-100/70 dark:hover:bg-blue-950 rounded-lg transition"
                             onClick={() => { setSelectedReport(r); setShowDetails(true); }}
+                            title="عرض تفاصيل البلاغ"
                           >
-                            عرض
+                            👁️
+                          </button>
+                          <button
+                            onClick={() => openEditModal(r)}
+                            title="تعديل المقاول والمدير والمشروع"
+                            className="p-1.5 text-amber-600 hover:bg-amber-100/70 dark:hover:bg-amber-950 rounded-lg transition"
+                          >
+                            ✏️
                           </button>
                           {!r.excluded && r.status !== 'تمت المعالجة' && (
                             <button
-                              className="px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded transition"
+                              className="p-1.5 text-red-600 hover:bg-red-100/70 dark:hover:bg-red-950 rounded-lg transition"
                               onClick={() => handleExclude(r.id)}
+                              title="استبعاد البلاغ من نطاق المشاريع"
                             >
-                              استبعاد
+                              🚫
                             </button>
                           )}
                         </div>
