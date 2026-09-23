@@ -1,4 +1,41 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
+
+const PROFILES_STORAGE_KEY = 'NWC_CONTRACTOR_PROFILES_V1'
+const MANUAL_ITEMS_STORAGE_KEY = 'NWC_CONTRACTOR_MANUAL_ITEMS_V1'
+
+function getStoredProfiles() {
+  try {
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function saveStoredProfiles(profiles) {
+  try {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles))
+  } catch (e) {
+    console.error('Failed to save contractor profiles to localStorage:', e)
+  }
+}
+
+function getStoredManualItems() {
+  try {
+    const raw = localStorage.getItem(MANUAL_ITEMS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch (e) {
+    return []
+  }
+}
+
+function saveStoredManualItems(items) {
+  try {
+    localStorage.setItem(MANUAL_ITEMS_STORAGE_KEY, JSON.stringify(items))
+  } catch (e) {
+    console.error('Failed to save contractor manual items to localStorage:', e)
+  }
+}
 
 export default function Contractors() {
   const [directory, setDirectory] = useState([])
@@ -9,6 +46,12 @@ export default function Contractors() {
   const [selectedManager, setSelectedManager] = useState('all')
   const [completionFilter, setCompletionFilter] = useState('all') // 'all' | 'completed' | 'pending'
   
+  // Storage & Sync State
+  const [syncing, setSyncing] = useState(false)
+  const [restorableCount, setRestorableCount] = useState(0)
+  const [toast, setToast] = useState(null)
+  const fileInputRef = useRef(null)
+
   // Edit / Fill Modal State
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -37,9 +80,62 @@ export default function Contractors() {
       const res = await fetch('/api/contractor-directory')
       if (res.ok) {
         const data = await res.json()
-        setDirectory(data.directory || [])
+        const dir = data.directory || []
+        setDirectory(dir)
         setStats(data.stats || {})
         setProgramManagers(data.programManagers || [])
+
+        // Auto-cache any filled data from server into localStorage
+        const storedProfiles = getStoredProfiles()
+        let cacheUpdated = false
+        dir.forEach(item => {
+          const cName = (item.contractorName || '').trim()
+          if (!cName || cName === 'غير محدد' || cName === '-') return
+          const p = storedProfiles[cName] || {}
+          const hasServerData = Boolean(
+            (item.crNumber && item.crNumber.trim()) ||
+            (item.unifiedNumber && item.unifiedNumber.trim()) ||
+            (item.managerName && item.managerName.trim()) ||
+            (item.managerPhone && item.managerPhone.trim()) ||
+            (item.managerEmail && item.managerEmail.trim())
+          )
+          if (hasServerData) {
+            storedProfiles[cName] = {
+              crNumber: item.crNumber || p.crNumber || '',
+              unifiedNumber: item.unifiedNumber || p.unifiedNumber || '',
+              managerName: item.managerName || p.managerName || '',
+              managerPhone: item.managerPhone || p.managerPhone || '',
+              managerEmail: item.managerEmail || p.managerEmail || '',
+              updatedAt: p.updatedAt || new Date().toISOString()
+            }
+            cacheUpdated = true
+          }
+        })
+        if (cacheUpdated) {
+          saveStoredProfiles(storedProfiles)
+        }
+
+        // Calculate how many records can be restored/enriched from localStorage
+        let canRestore = 0
+        dir.forEach(item => {
+          const cName = (item.contractorName || '').trim()
+          const p = storedProfiles[cName]
+          if (p) {
+            const hasDiff = (!item.crNumber && p.crNumber) ||
+                            (!item.unifiedNumber && p.unifiedNumber) ||
+                            (!item.managerName && p.managerName) ||
+                            (!item.managerPhone && p.managerPhone) ||
+                            (!item.managerEmail && p.managerEmail)
+            if (hasDiff) canRestore++
+          }
+        })
+        const storedManuals = getStoredManualItems()
+        storedManuals.forEach(m => {
+          if (!dir.some(d => String(d.id) === String(m.id))) {
+            canRestore++
+          }
+        })
+        setRestorableCount(canRestore)
       }
     } catch (err) {
       console.error('Error fetching contractor directory:', err)
@@ -138,6 +234,23 @@ export default function Contractors() {
 
     setSaving(true)
     try {
+      // 1. Instantly record in browser localStorage
+      const cName = (formData.contractorName || '').trim()
+      if (cName) {
+        const currentProfiles = getStoredProfiles()
+        const prev = currentProfiles[cName] || {}
+        currentProfiles[cName] = {
+          crNumber: (formData.crNumber && String(formData.crNumber).trim()) || prev.crNumber || '',
+          unifiedNumber: (formData.unifiedNumber && String(formData.unifiedNumber).trim()) || prev.unifiedNumber || '',
+          managerName: (formData.managerName && String(formData.managerName).trim()) || prev.managerName || '',
+          managerPhone: (formData.managerPhone && String(formData.managerPhone).trim()) || prev.managerPhone || '',
+          managerEmail: (formData.managerEmail && String(formData.managerEmail).trim()) || prev.managerEmail || '',
+          updatedAt: new Date().toISOString()
+        }
+        saveStoredProfiles(currentProfiles)
+      }
+
+      // 2. Send to server
       const res = await fetch('/api/contractor-directory/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -146,6 +259,8 @@ export default function Contractors() {
       if (res.ok) {
         setShowEditModal(false)
         await fetchDirectory()
+        setToast({ message: 'تم حفظ وتثبيت بيانات المقاول بنجاح في المتصفح والسيرفر', type: 'success' })
+        setTimeout(() => setToast(null), 4000)
       } else {
         const err = await res.json()
         alert(`خطأ: ${err.error || 'فشل في الحفظ'}`)
@@ -167,14 +282,41 @@ export default function Contractors() {
 
     setSaving(true)
     try {
+      // 1. Instantly record in browser localStorage
+      const cName = (formData.contractorName || '').trim()
+      if (cName) {
+        const currentProfiles = getStoredProfiles()
+        const prev = currentProfiles[cName] || {}
+        currentProfiles[cName] = {
+          crNumber: (formData.crNumber && String(formData.crNumber).trim()) || prev.crNumber || '',
+          unifiedNumber: (formData.unifiedNumber && String(formData.unifiedNumber).trim()) || prev.unifiedNumber || '',
+          managerName: (formData.managerName && String(formData.managerName).trim()) || prev.managerName || '',
+          managerPhone: (formData.managerPhone && String(formData.managerPhone).trim()) || prev.managerPhone || '',
+          managerEmail: (formData.managerEmail && String(formData.managerEmail).trim()) || prev.managerEmail || '',
+          updatedAt: new Date().toISOString()
+        }
+        saveStoredProfiles(currentProfiles)
+      }
+
+      // 2. Send to server
       const res = await fetch('/api/contractor-directory/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
       if (res.ok) {
+        const data = await res.json()
+        if (data.item) {
+          const manuals = getStoredManualItems()
+          if (!manuals.some(m => String(m.id) === String(data.item.id))) {
+            manuals.unshift(data.item)
+            saveStoredManualItems(manuals)
+          }
+        }
         setShowAddModal(false)
         await fetchDirectory()
+        setToast({ message: 'تمت إضافة وتثبيت بيانات المقاول والمشروع بنجاح', type: 'success' })
+        setTimeout(() => setToast(null), 4000)
       } else {
         const err = await res.json()
         alert(`خطأ: ${err.error || 'فشل في الإضافة'}`)
@@ -193,6 +335,9 @@ export default function Contractors() {
     try {
       const res = await fetch(`/api/contractor-directory/${item.id}`, { method: 'DELETE' })
       if (res.ok) {
+        // Also remove from stored manual items if exists
+        const manuals = getStoredManualItems().filter(m => String(m.id) !== String(item.id))
+        saveStoredManualItems(manuals)
         await fetchDirectory()
       } else {
         const err = await res.json()
@@ -201,6 +346,115 @@ export default function Contractors() {
     } catch (e) {
       console.error(e)
     }
+  }
+
+  // Bulk restore from localStorage to server
+  const handleRestoreFromStorage = async (silent = false) => {
+    setSyncing(true)
+    try {
+      const profiles = getStoredProfiles()
+      const directoryItems = getStoredManualItems()
+      const profilesCount = Object.keys(profiles).length
+
+      if (profilesCount === 0 && directoryItems.length === 0) {
+        if (!silent) alert('لا توجد بيانات مقاولين محفوظة محلياً في هذا المتصفح')
+        return
+      }
+
+      const res = await fetch('/api/contractor-directory/bulk-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profiles, directoryItems })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        await fetchDirectory()
+        setToast({
+          message: data.message || `تمت استعادة وتحديث البيانات من المحفوظات بنجاح (${data.updatedCount || 0} سجل)!`,
+          type: 'success'
+        })
+        setTimeout(() => setToast(null), 5000)
+      } else {
+        const err = await res.json()
+        alert(`خطأ أثناء المزامنة: ${err.error || 'فشلت المزامنة'}`)
+      }
+    } catch (err) {
+      console.error('Error in handleRestoreFromStorage:', err)
+      alert('حدث خطأ في الاتصال أثناء استعادة المحفوظات')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Export local data to downloadable JSON backup
+  const handleExportBackupJSON = () => {
+    try {
+      const profiles = getStoredProfiles()
+      const manualItems = getStoredManualItems()
+      const payload = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        profilesCount: Object.keys(profiles).length,
+        manualItemsCount: manualItems.length,
+        profiles,
+        manualItems
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `NWC_Contractor_Profiles_Backup_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Failed to export JSON backup:', e)
+      alert('تعذر تصدير النسخة الاحتياطية')
+    }
+  }
+
+  // Import JSON backup file and sync
+  const handleImportBackupJSON = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result)
+        const importedProfiles = parsed.profiles || (parsed.contractorName ? { [parsed.contractorName]: parsed } : {})
+        const importedManuals = parsed.manualItems || []
+
+        const curProfiles = getStoredProfiles()
+        const merged = { ...curProfiles, ...importedProfiles }
+        saveStoredProfiles(merged)
+
+        if (importedManuals.length > 0) {
+          const curManuals = getStoredManualItems()
+          const mergedManuals = [...curManuals]
+          importedManuals.forEach(im => {
+            if (!mergedManuals.some(m => String(m.id) === String(im.id))) {
+              mergedManuals.unshift(im)
+            }
+          })
+          saveStoredManualItems(mergedManuals)
+        }
+
+        await handleRestoreFromStorage(true)
+        setToast({
+          message: `تم استيراد ملف النسخة الاحتياطية وتحديث المحفوظات بنجاح!`,
+          type: 'success'
+        })
+        setTimeout(() => setToast(null), 5000)
+      } catch (err) {
+        console.error('Import error:', err)
+        alert('الملف غير صالح أو بتنسيق JSON غير مدعوم')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   // Export to Excel
@@ -223,15 +477,57 @@ export default function Contractors() {
             سجل وبيانات المقاولين
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
-            جدول توثيق بيانات المقاولين والمشاريع: أرقام السجلات التجارية، الرقم الموحد (700)، ومسؤولي الاتصال مع مدراء البرامج والمشاريع بشركة المياه الوطنية.
+            جدول توثيق بيانات المقاولين والمشاريع: أرقام السجلات التجارية، الرقم الموحد (700)، ومسؤولي الاتصال مع مدراء البرامج والمشاريع بشركة المياه الوطنية. يتم حفظ بياناتك تلقائياً ويمكن استعادتها بضغطة زر.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Hidden File Input for JSON Backup Import */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportBackupJSON}
+            accept=".json"
+            className="hidden"
+          />
+
+          <button
+            onClick={() => handleRestoreFromStorage(false)}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-xs whitespace-nowrap disabled:opacity-50 relative"
+            title="جلب وتحديث بيانات المقاولين من المحفوظات المحلية وتثبيتها بالسيرفر"
+          >
+            <span>🔄</span>
+            <span>{syncing ? 'جاري الاستعادة...' : 'استعادة المحفوظات'}</span>
+            {restorableCount > 0 && (
+              <span className="bg-amber-400 text-gray-900 text-[10px] font-black px-1.5 py-0.5 rounded-full mr-1 animate-pulse">
+                {restorableCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={handleExportBackupJSON}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl font-bold transition text-xs whitespace-nowrap border border-gray-200 dark:border-gray-600"
+            title="تحميل نسخة احتياطية من جميع بيانات المقاولين المسجلة لديك كملف JSON"
+          >
+            <span>💾</span>
+            <span>حفظ نسخة JSON</span>
+          </button>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl font-bold transition text-xs whitespace-nowrap border border-gray-200 dark:border-gray-600"
+            title="استيراد وتثبيت بيانات المقاولين من ملف نسخة احتياطية JSON"
+          >
+            <span>📥</span>
+            <span>استيراد نسخة</span>
+          </button>
+
           <button
             onClick={handleExportExcel}
             disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-sm whitespace-nowrap disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-xs whitespace-nowrap disabled:opacity-50"
             title="تصدير جدول بيانات المقاولين بتنسيق Excel"
           >
             <span>📊</span>
@@ -240,13 +536,38 @@ export default function Contractors() {
 
           <button
             onClick={handleOpenAdd}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-sm whitespace-nowrap"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-xs whitespace-nowrap"
           >
             <span>➕</span>
             <span>إضافة مقاول / مشروع</span>
           </button>
         </div>
       </div>
+
+      {/* Alert Banner if local saved data has differences from server */}
+      {restorableCount > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-900 dark:text-amber-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚡</span>
+            <div>
+              <p className="font-bold text-sm">
+                تنبيه: تم العثور على {restorableCount} سجل لديه بيانات محفوظة محلياً في جهازك ولم تُثبت بالسيرفر بعد!
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                يمكنك الضغط على زر الاستعادة لجلب وتثبيت جميع السجلات التجارية وأرقام التواصل فوراً لتفادي ضياعها بعد إعادة تشغيل الموقع.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleRestoreFromStorage(false)}
+            disabled={syncing}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow transition whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <span>🔄</span>
+            <span>{syncing ? 'جاري الاستعادة...' : 'استعادة وتثبيت المحفوظات الآن'}</span>
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -809,6 +1130,14 @@ export default function Contractors() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 left-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 text-xs md:text-sm font-bold border border-emerald-500 animate-bounce">
+          <span>✅</span>
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

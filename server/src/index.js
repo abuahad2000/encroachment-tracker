@@ -926,6 +926,86 @@ app.post('/api/contractor-directory/add', (req, res) => {
   res.json({ success: true, item: newItem, message: 'تمت إضافة المشروع والمقاول بنجاح' })
 })
 
+// Bulk sync / restore contractor profiles and directory entries
+app.post('/api/contractor-directory/bulk-sync', (req, res) => {
+  try {
+    const { profiles: incomingProfiles = {}, directoryItems = [] } = req.body
+
+    const existingProfiles = loadContractorProfiles()
+    const mergedProfiles = { ...existingProfiles }
+
+    // Merge incoming profiles
+    for (const [cName, pData] of Object.entries(incomingProfiles)) {
+      if (!cName || cName === 'غير محدد' || cName === '-') continue
+      const prev = mergedProfiles[cName] || {}
+      mergedProfiles[cName] = {
+        crNumber: (pData.crNumber && String(pData.crNumber).trim()) || prev.crNumber || '',
+        unifiedNumber: (pData.unifiedNumber && String(pData.unifiedNumber).trim()) || prev.unifiedNumber || '',
+        managerName: (pData.managerName && String(pData.managerName).trim()) || prev.managerName || '',
+        managerPhone: (pData.managerPhone && String(pData.managerPhone).trim()) || prev.managerPhone || '',
+        managerEmail: (pData.managerEmail && String(pData.managerEmail).trim()) || prev.managerEmail || '',
+        updatedAt: pData.updatedAt || new Date().toISOString()
+      }
+    }
+    saveContractorProfiles(mergedProfiles)
+
+    // Merge directory items
+    let directory = loadContractorDirectory()
+    let updatedCount = 0
+
+    // Update existing directory with merged profiles
+    directory = directory.map(item => {
+      const cName = (item.contractorName || '').trim()
+      const prof = mergedProfiles[cName]
+      if (prof) {
+        const hasChange = (!item.crNumber && prof.crNumber) ||
+                          (!item.unifiedNumber && prof.unifiedNumber) ||
+                          (!item.managerName && prof.managerName) ||
+                          (!item.managerPhone && prof.managerPhone) ||
+                          (!item.managerEmail && prof.managerEmail)
+        if (hasChange) {
+          updatedCount++
+          return {
+            ...item,
+            crNumber: item.crNumber || prof.crNumber || '',
+            unifiedNumber: item.unifiedNumber || prof.unifiedNumber || '',
+            managerName: item.managerName || prof.managerName || '',
+            managerPhone: item.managerPhone || prof.managerPhone || '',
+            managerEmail: item.managerEmail || prof.managerEmail || '',
+            updatedAt: new Date().toISOString()
+          }
+        }
+      }
+      return item
+    })
+
+    // Add any manual items that do not exist yet
+    if (Array.isArray(directoryItems)) {
+      directoryItems.forEach(manualItem => {
+        if (manualItem && (manualItem.source === 'manual_added' || String(manualItem.id).startsWith('manual_'))) {
+          if (!directory.some(d => String(d.id) === String(manualItem.id))) {
+            directory.unshift(manualItem)
+            updatedCount++
+          }
+        }
+      })
+    }
+
+    saveContractorDirectory(directory)
+
+    console.log(`🔄 Bulk sync completed: ${updatedCount} contractor entries restored & secured`)
+    res.json({
+      success: true,
+      updatedCount,
+      totalEntries: directory.length,
+      message: `تمت استعادة ومزامنة ${updatedCount} سجل بنجاح وتثبيت بياناتهم بالسيرفر`
+    })
+  } catch (err) {
+    console.error('Error in bulk-sync contractor directory:', err)
+    res.status(500).json({ error: 'فشل في مزامنة بيانات المقاولين', details: err.message })
+  }
+})
+
 // Delete manual contractor directory record
 app.delete('/api/contractor-directory/:id', (req, res) => {
   const id = req.params.id
