@@ -14,11 +14,86 @@ export const DEFAULT_ASWAD_CONTRACTORS = [
   'العرين',
   'شركة الاومير للتجارة والمقاولات',
   'الاومير',
+  'شركة النمال للمقاولات مساهمة مقفلة',
+  'النمال',
   'مؤسسة ثليل للمقاولات',
   'ثليل',
   'شركة صلت للمقاولات',
-  'صلت'
+  'صلت',
+  'شركة ابداع الحياة للإستثمار',
+  'شركة نظم تقنية المياه للمقاولات',
+  'شركة المسبك الوطني للتجارة والصناعة والمقاولات'
 ]
+
+// التحقق من وجود اسم مقاول حقيقي معتبر في البلاغ
+export function hasValidContractor(contractorName) {
+  if (!contractorName) return false
+  const trimmed = String(contractorName).trim()
+  if (!trimmed || trimmed.toUpperCase() === 'NULL' || trimmed === '-' || trimmed === 'غير محدد') return false
+  const norm = normalizeArabic(trimmed).toLowerCase()
+  if (norm === 'شركه المياه الوطنيه' || norm === 'شركة المياه الوطنية') return false
+  return true
+}
+
+// فحص توافق المقاول مع مدير البرنامج: هل هذا المقاول يعمل تحت إدارة مدير البرنامج المعني؟
+export function isContractorCompatibleWithManager(reportContractor, programManager, allProjects) {
+  if (!hasValidContractor(reportContractor)) return true
+  if (!programManager || programManager === 'غير محدد' || programManager === '-') return false
+
+  const managerProjects = allProjects.filter(p => p.programManager === programManager)
+  const managerContractors = managerProjects.map(p => p.contractor).filter(Boolean)
+
+  if (programManager.includes('الأسود') || programManager.includes('الاسود')) {
+    managerContractors.push(...DEFAULT_ASWAD_CONTRACTORS)
+  }
+
+  return matchContractor(reportContractor, managerContractors)
+}
+
+// فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
+export function getCityWideMiscContractorProject(report, activeProjects) {
+  const cName = report.contractorName
+  if (!hasValidContractor(cName)) return null
+  const norm = normalizeArabic(cName).toLowerCase()
+
+  // 1. الاومير -> عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض (عقد رقم 26) - Project #62
+  if (norm.includes('اومير') || norm.includes('أومير')) {
+    const p = activeProjects.find(pr => String(pr.id) === '62' || (pr.name?.includes('26') && pr.contractor?.includes('الاومير')))
+    if (p) return p
+  }
+
+  // 2. العيسى -> تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض – عقد رقم 26 – المرحلة الثالثة - Project #60
+  if (norm.includes('عيسى') || norm.includes('عيسي')) {
+    const p = activeProjects.find(pr => String(pr.id) === '60' || (pr.name?.includes('المرحلة الثالثة') && pr.contractor?.includes('العيسى')))
+    if (p) return p
+  }
+
+  // 3. النمال -> عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة - Project #61
+  if (norm.includes('نمال')) {
+    // إذا كان البلاغ يقع جغرافياً داخل أحد مشاريع النمال المحددة (مثل الملقا أو العارض)، يُعطى الأولوية للمشروع المحدد
+    const specificNimalProjects = activeProjects.filter(pr => 
+      pr.contractor?.includes('النمال') && 
+      !pr.scope?.includes('شامل') && 
+      pr._kmzFeatures?.length > 0
+    )
+    if (report.longitude && report.latitude) {
+      const pt = [report.longitude, report.latitude]
+      for (const sp of specificNimalProjects) {
+        for (const feat of sp._kmzFeatures) {
+          if (pointInBounds(pt, feat.geometry, feat._bbox)) {
+            return sp
+          }
+        }
+      }
+    }
+
+    // إذا لم يقع في مشروع محدد للنمال، يُسند لعقد المتفرقات الشامل رقم 61 التابع لـ م. عبدالله الأسود
+    const p = activeProjects.find(pr => String(pr.id) === '61' || (pr.name?.includes('المرحلة الرابعة') && pr.contractor?.includes('النمال')))
+    if (p) return p
+  }
+
+  return null
+}
 
 function isMaintenanceReport(report) {
   const text = (report.description + ' ' + report.centerComment).toLowerCase()
@@ -143,6 +218,19 @@ function matchProjectToFeature(project, feat) {
 export function matchReportToProject(report, activeProjects, contractorsConfig) {
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
+  // 1. فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
+  // هؤلاء المقاولون عقودهم شاملة مدينة الرياض ولا ترتبط بنطاق مكاني محدد، ويتبعون م. عبدالله الأسود
+  const miscProject = getCityWideMiscContractorProject(report, activeProjects)
+  if (miscProject) {
+    return {
+      matched: true,
+      project: miscProject,
+      confidence: 0.98,
+      reason: 'city_wide_misc_contractor:sewer',
+      shouldReview: false
+    }
+  }
+
   // قاعدة المقاول "الأعمال المدنية": إذا لم يتطابق الحي مع المشروع الجاري يجعله مستبعداً فوراً
   if (isCivilWorks) {
     const civilProj = activeProjects.find(p => p.id === '57' || p.id === 57 || matchContractor('شركة الأعمال المدنية', [p.contractor]))
@@ -162,16 +250,42 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
   const hasCoords = report.longitude && report.latitude && report.longitude !== 0 && report.latitude !== 0
   const point = hasCoords ? [report.longitude, report.latitude] : null
   const isGovReport = report.city && !report.city.includes('الرياض')
+  const reportSector = report.sector || classifyReportSectorFromText(report)
+
+  // متغيرات لتتبع سبب الاستبعاد عند وجود تقاطع مكاني
+  let hasAnySpatialMatch = false
+  let rejectedDueToSewerWaterMismatch = false
+  let rejectedDueToContractorManagerMismatch = false
 
   // 1. الفحص المكاني الصارم: البحث عن الطبقات الجارية التي تحتوي النقطة جغرافياً
-  let hasAnySpatialMatch = false
   if (point) {
     for (const project of activeProjects) {
       if (project._kmzFeatures?.length > 0) {
         for (const feat of project._kmzFeatures) {
           if (pointInBounds(point, feat.geometry, feat._bbox)) {
             hasAnySpatialMatch = true
-            const hasContractor = report.contractorName && report.contractorName.toUpperCase() !== 'NULL'
+
+            // قاعدة 2: إذا كان المشروع صرف وله نطاق معين والبلاغ مياه يُستبعد مباشرة
+            const projSector = getProjectSector(project)
+            const isSpecificScope = project.scope && 
+              !project.scope.includes('شامل') && 
+              !project.subProgram?.includes('المتفرقات')
+
+            if (projSector === 'صرف' && isSpecificScope && reportSector === 'مياه') {
+              rejectedDueToSewerWaterMismatch = true
+              continue
+            }
+
+            // قاعدة 1: إذا كان المقاول بملف التعديات المستورد لا يتوافق مع مدير البرنامج اجعله مستبعداً مباشرة
+            if (hasValidContractor(report.contractorName)) {
+              const isCompatible = isContractorCompatibleWithManager(report.contractorName, project.programManager, activeProjects)
+              if (!isCompatible) {
+                rejectedDueToContractorManagerMismatch = true
+                continue
+              }
+            }
+
+            const hasContractor = hasValidContractor(report.contractorName)
             const contractorMatched = hasContractor ? matchContractor(report.contractorName, [project.contractor]) : true
             const districtMatches = !report.district || matchDistrict(report.district, project.scope)
 
@@ -202,6 +316,28 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
           }
         }
       }
+    }
+  }
+
+  // إذا وُجد تقاطع مكاني ولكن تم رفض المرشحين لعدم توافق المقاول مع مدير البرنامج: يُستبعد مباشرة
+  if (candidates.length === 0 && rejectedDueToContractorManagerMismatch) {
+    return {
+      matched: false,
+      excluded: true,
+      excludedReason: 'المقاول بملف التعديات لا يتوافق مع مدير البرنامج/المشروع',
+      confidence: 0,
+      reason: 'contractor_program_manager_mismatch'
+    }
+  }
+
+  // إذا وُجد تقاطع مكاني ولكن تم رفض المرشحين لأن المشروع صرف ذو نطاق محدد والبلاغ مياه: يُستبعد مباشرة
+  if (candidates.length === 0 && rejectedDueToSewerWaterMismatch) {
+    return {
+      matched: false,
+      excluded: true,
+      excludedReason: 'بلاغ شبكة مياه يقع ضمن نطاق مشروع صرف صحي (عدم تطابق نوع الخدمة)',
+      confidence: 0,
+      reason: 'sewer_scope_water_report_mismatch'
     }
   }
 

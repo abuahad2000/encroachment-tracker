@@ -58,40 +58,17 @@ export async function buildData(customReportsFile = null) {
       } catch (e) {}
     }
 
-    // 2.3 Auto-harvest and safeguard any user exclusions or locked assignments from existing reports.json
-    const currentReportsPath = path.join(__dirname, '../../data/generated/reports.json')
-    if (fs.existsSync(currentReportsPath)) {
-      try {
-        const currentReps = JSON.parse(fs.readFileSync(currentReportsPath, 'utf-8'))
-        if (Array.isArray(currentReps)) {
-          currentReps.forEach(r => {
-            const k = normalizeId(r.id)
-            if (!k) return
-            const isUserExcluded = r.excluded && r.excludedReason !== 'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)'
-            const isUserLocked = r.isLocked || r.lockedContractor || r.customContractor || r.customProgramManager || r.customSector || (r.reason === 'manual_override')
-
-            if (isUserExcluded || isUserLocked) {
-              const existingO = overridesMap.get(k) || {}
-              overridesMap.set(k, {
-                reportId: r.id,
-                licenseNumber: r.licenseNumber || existingO.licenseNumber || '',
-                latitude: r.latitude || existingO.latitude || null,
-                longitude: r.longitude || existingO.longitude || null,
-                district: r.district || existingO.district || '',
-                excluded: r.excluded !== undefined ? !!r.excluded : !!existingO.excluded,
-                reason: r.excludedReason || existingO.reason || r.reason || (r.excluded ? 'مستبعد من نطاق مشاريع مدير البرنامج' : 'تثبيت وتعديل معتمد'),
-                projectId: r.project?.id || existingO.projectId || null,
-                project: r.project ? { ...r.project } : (existingO.project ? { ...existingO.project } : null),
-                customContractor: r.customContractor || (r.isLocked ? r.contractorName : undefined) || existingO.customContractor,
-                customProgramManager: r.project?.programManager || existingO.customProgramManager,
-                customSector: r.sector || existingO.customSector,
-                isLocked: true,
-                timestamp: existingO.timestamp || new Date().toISOString()
-              })
-            }
-          })
-        }
-      } catch (e) {}
+    // Filter out any automated engine exclusion reasons from overrides so rules can evaluate dynamically
+    const AUTOMATED_EXCLUSIONS = [
+      'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)',
+      'خارج النطاق الجغرافي للمشاريع (غير تابع لنطاق مكاني)',
+      'المقاول بملف التعديات لا يتوافق مع مدير البرنامج/المشروع',
+      'بلاغ شبكة مياه يقع ضمن نطاق مشروع صرف صحي (عدم تطابق نوع الخدمة)'
+    ]
+    for (const [k, v] of overridesMap.entries()) {
+      if (v.excluded && AUTOMATED_EXCLUSIONS.includes(v.reason)) {
+        overridesMap.delete(k)
+      }
     }
 
     const overrides = Array.from(overridesMap.values())
