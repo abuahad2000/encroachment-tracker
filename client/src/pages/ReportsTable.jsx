@@ -521,6 +521,17 @@ export default function ReportsTable() {
                       {/* الإجراءات برموز مدمجة لتوفير المساحة */}
                       <td className="px-2 py-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
+                          {r.latitude && r.longitude && (
+                            <a
+                              href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-100/70 dark:hover:bg-emerald-950 rounded-lg transition"
+                              title="فتح الموقع في خرائط Google"
+                            >
+                              📍
+                            </a>
+                          )}
                           <button
                             className="p-1.5 text-blue-600 hover:bg-blue-100/70 dark:hover:bg-blue-950 rounded-lg transition"
                             onClick={() => { setSelectedReport(r); setShowDetails(true); }}
@@ -639,21 +650,32 @@ export default function ReportsTable() {
                 </div>
               ) : null}
 
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2.5">
                 <button
-                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition"
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition text-sm"
                   onClick={() => setShowDetails(false)}
                 >
                   إغلاق
                 </button>
+                {selectedReport.latitude && selectedReport.longitude && (
+                  <a
+                    href={`https://www.google.com/maps?q=${selectedReport.latitude},${selectedReport.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center justify-center gap-1.5 transition shadow text-sm"
+                  >
+                    <span>📍</span>
+                    <span>خرائط Google</span>
+                  </a>
+                )}
                 <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition text-sm"
                   onClick={() => {
                     openEditModal(selectedReport)
                     setShowDetails(false)
                   }}
                 >
-                  ✏️ تعديل المقاول / مدير البرنامج
+                  ✏️ تعديل
                 </button>
               </div>
             </div>

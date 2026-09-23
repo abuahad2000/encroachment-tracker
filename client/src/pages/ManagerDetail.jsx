@@ -414,20 +414,33 @@ export default function ManagerDetail() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => { setSelectedReport(r); setShowDetails(true); }}
-                          className="px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded-lg transition"
-                        >
-                          التفاصيل
-                        </button>
-                        {!isProcessed && (
+                        <div className="flex items-center justify-center gap-1">
+                          {r.latitude && r.longitude && (
+                            <a
+                              href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded-lg transition"
+                              title="فتح الموقع في خرائط Google"
+                            >
+                              📍
+                            </a>
+                          )}
                           <button
-                            onClick={() => handleExclude(r.id)}
-                            className="px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition mr-1"
+                            onClick={() => { setSelectedReport(r); setShowDetails(true); }}
+                            className="px-2 py-1 text-xs font-semibold text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/50 rounded-lg transition"
                           >
-                            استبعاد
+                            التفاصيل
                           </button>
-                        )}
+                          {!isProcessed && (
+                            <button
+                              onClick={() => handleExclude(r.id)}
+                              className="px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg transition mr-1"
+                            >
+                              استبعاد
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -518,21 +531,32 @@ export default function ManagerDetail() {
                 </div>
               )}
 
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2.5">
                 <button
-                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition"
+                  className="flex-1 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-300 transition text-sm"
                   onClick={() => setShowDetails(false)}
                 >
                   إغلاق
                 </button>
+                {selectedReport.latitude && selectedReport.longitude && (
+                  <a
+                    href={`https://www.google.com/maps?q=${selectedReport.latitude},${selectedReport.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center justify-center gap-1.5 transition shadow text-sm"
+                  >
+                    <span>📍</span>
+                    <span>خرائط Google</span>
+                  </a>
+                )}
                 <button
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition text-sm"
                   onClick={() => {
                     openEditModal(selectedReport)
                     setShowDetails(false)
                   }}
                 >
-                  ✏️ تعديل المقاول والمشروع والقطاع
+                  ✏️ تعديل
                 </button>
               </div>
             </div>

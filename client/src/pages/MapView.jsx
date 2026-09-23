@@ -21,6 +21,7 @@ export default function MapView() {
   const [activeTab, setActiveTab] = useState('all') // 'water' | 'sanitation' | 'all'
   const [searchQuery, setSearchQuery] = useState('')
   const [showReportPins, setShowReportPins] = useState(true)
+  const [pinStatusFilter, setPinStatusFilter] = useState('contractor') // 'contractor' | 'in_progress' | 'all'
   const [selectedManager, setSelectedManager] = useState('all')
   const [loading, setLoading] = useState(true)
 
@@ -93,10 +94,20 @@ export default function MapView() {
     )
   }, [reports])
 
+  // تحت معالجة المقاول فقط (118 بلاغاً)
+  const contractorPendingReports = useMemo(() => {
+    return pendingReports.filter(r => r.actionCategory === 'تحت معالجة المقاول')
+  }, [pendingReports])
+
+  // تحت الإجراء (17 بلاغاً)
+  const inProgressReports = useMemo(() => {
+    return pendingReports.filter(r => r.actionCategory === 'تحت الإجراء')
+  }, [pendingReports])
+
   // Extract unique program managers from pending reports filtered by sector
   const availableManagers = useMemo(() => {
     const set = new Set()
-    let pool = pendingReports
+    let pool = pinStatusFilter === 'contractor' ? contractorPendingReports : pendingReports
     if (activeTab === 'water') {
       pool = pool.filter(r => {
         const sec = r.sector || ''
@@ -127,7 +138,7 @@ export default function MapView() {
       }
     })
     return Array.from(set).sort()
-  }, [pendingReports, activeTab])
+  }, [pendingReports, contractorPendingReports, pinStatusFilter, activeTab])
 
   // Reset selected manager if not present in current sector's managers
   useEffect(() => {
@@ -136,11 +147,16 @@ export default function MapView() {
     }
   }, [activeTab, availableManagers, selectedManager])
 
-  // Filtered reports by sector (activeTab), selected manager & search query
+  // Filtered reports by sector (activeTab), status filter, selected manager & search query
   const displayedReportPins = useMemo(() => {
     if (!showReportPins) return []
 
     let list = pendingReports
+    if (pinStatusFilter === 'contractor') {
+      list = contractorPendingReports
+    } else if (pinStatusFilter === 'in_progress') {
+      list = inProgressReports
+    }
 
     // 1. Strict sector filtering
     if (activeTab === 'water') {
@@ -184,7 +200,7 @@ export default function MapView() {
       const pmgr = (r.project?.projectManager || '').toLowerCase()
       return idStr.includes(q) || dist.includes(q) || proj.includes(q) || cont.includes(q) || mgr.includes(q) || pmgr.includes(q)
     })
-  }, [pendingReports, showReportPins, activeTab, selectedManager, searchQuery])
+  }, [pendingReports, contractorPendingReports, inProgressReports, pinStatusFilter, showReportPins, activeTab, selectedManager, searchQuery])
 
   // Filter polygon/linestring features based on tab and search
   const filteredFeatures = useMemo(() => {
@@ -415,29 +431,79 @@ export default function MapView() {
           {/* Toggle Pins Button */}
           <button
             onClick={() => setShowReportPins(!showReportPins)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
               showReportPins
                 ? 'bg-red-600 text-white ring-2 ring-red-300 dark:ring-red-900'
                 : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600'
             }`}
           >
             <span>📍</span>
-            <span>نقاط البلاغات المعلقة</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showReportPins ? 'bg-red-800 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            <span>{showReportPins ? 'إخفاء النقاط' : 'إظهار نقاط البلاغات'}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showReportPins ? 'bg-red-800 text-white font-mono' : 'bg-gray-200 dark:bg-gray-600'}`}>
               {displayedReportPins.length}
             </span>
           </button>
+
+          {/* Status Filter Tabs for Pins */}
+          {showReportPins && (
+            <div className="flex items-center bg-white dark:bg-gray-700 p-0.5 rounded-xl border border-gray-300 dark:border-gray-600 text-[11px]">
+              <button
+                onClick={() => setPinStatusFilter('contractor')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                  pinStatusFilter === 'contractor'
+                    ? 'bg-red-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
+                }`}
+                title="عرض البلاغات التي تحت معالجة المقاول فقط (مطابق لتقرير الإدارة)"
+              >
+                <span>⚠️ تحت معالجة المقاول</span>
+                <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'contractor' ? 'bg-red-800 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                  {contractorPendingReports.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setPinStatusFilter('in_progress')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                  pinStatusFilter === 'in_progress'
+                    ? 'bg-sky-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
+                }`}
+                title="عرض البلاغات التي تحت الإجراء"
+              >
+                <span>🔄 تحت الإجراء</span>
+                <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'in_progress' ? 'bg-sky-800 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                  {inProgressReports.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setPinStatusFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                  pinStatusFilter === 'all'
+                    ? 'bg-gray-900 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
+                }`}
+                title="عرض كافة البلاغات النشطة"
+              >
+                <span>الكل</span>
+                <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                  {pendingReports.length}
+                </span>
+              </button>
+            </div>
+          )}
 
           {/* Manager Filter */}
           {showReportPins && (
             <select
               value={selectedManager}
               onChange={e => setSelectedManager(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="px-3 py-1.5 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 font-medium"
             >
-              <option value="all">كافة مدراء البرامج ({pendingReports.length})</option>
+              <option value="all">كافة مدراء البرامج ({availableManagers.length})</option>
               {availableManagers.map(mgr => {
-                const count = pendingReports.filter(r => r.project?.programManager === mgr).length
+                const count = (pinStatusFilter === 'contractor' ? contractorPendingReports : (pinStatusFilter === 'in_progress' ? inProgressReports : pendingReports)).filter(r => r.project?.programManager === mgr).length
                 return (
                   <option key={mgr} value={mgr}>
                     {mgr} ({count})
@@ -531,6 +597,33 @@ export default function MapView() {
                       <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #e2e8f0', fontSize: '10px', color: '#64748b', maxHeight: '60px', overflowY: 'auto' }}>
                         {r.description}
                       </div>
+                    )}
+
+                    {r.latitude && r.longitude && (
+                      <a
+                        href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          width: '100%',
+                          marginTop: '8px',
+                          padding: '6px 12px',
+                          background: '#2563eb',
+                          color: '#ffffff',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          textDecoration: 'none',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+                        }}
+                      >
+                        <span>📍</span>
+                        <span>فتح الموقع في خرائط Google</span>
+                      </a>
                     )}
                   </div>
                 </Popup>
