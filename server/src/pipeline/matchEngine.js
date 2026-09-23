@@ -70,14 +70,15 @@ export function getCityWideMiscContractorProject(report, activeProjects) {
 
   // 3. النمال -> عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة - Project #61
   if (norm.includes('نمال')) {
-    // إذا كان البلاغ يقع جغرافياً داخل أحد مشاريع النمال المحددة (مثل الملقا أو العارض)، يُعطى الأولوية للمشروع المحدد
-    const specificNimalProjects = activeProjects.filter(pr => 
-      pr.contractor?.includes('النمال') && 
-      !pr.scope?.includes('شامل') && 
-      pr._kmzFeatures?.length > 0
-    )
     if (report.longitude && report.latitude) {
       const pt = [report.longitude, report.latitude]
+
+      // أ. إذا كان البلاغ يقع جغرافياً داخل أحد مشاريع النمال المحددة (مثل الملقا أو العارض)، يُعطى الأولوية للمشروع المحدد
+      const specificNimalProjects = activeProjects.filter(pr => 
+        pr.contractor?.includes('النمال') && 
+        !pr.scope?.includes('شامل') && 
+        pr._kmzFeatures?.length > 0
+      )
       for (const sp of specificNimalProjects) {
         for (const feat of sp._kmzFeatures) {
           if (pointInBounds(pt, feat.geometry, feat._bbox)) {
@@ -85,11 +86,20 @@ export function getCityWideMiscContractorProject(report, activeProjects) {
           }
         }
       }
+
+      // ب. التحقق من الوقوع على خطوط طبقة النمال المعتمدة (عقد 26 المرحلة الرابعة - المشروع #61)
+      const p61 = activeProjects.find(pr => String(pr.id) === '61' || (pr.name?.includes('المرحلة الرابعة') && pr.contractor?.includes('النمال')))
+      if (p61 && p61._kmzFeatures?.length > 0) {
+        for (const feat of p61._kmzFeatures) {
+          if (pointInBounds(pt, feat.geometry, feat._bbox)) {
+            return p61
+          }
+        }
+      }
     }
 
-    // إذا لم يقع في مشروع محدد للنمال، يُسند لعقد المتفرقات الشامل رقم 61 التابع لـ م. عبدالله الأسود
-    const p = activeProjects.find(pr => String(pr.id) === '61' || (pr.name?.includes('المرحلة الرابعة') && pr.contractor?.includes('النمال')))
-    if (p) return p
+    // ج. إذا لم يقع جغرافياً على خطوط الطبقة المعتمدة أو نطاق مشاريع النمال، لا يُسند لعقد المتفرقات الشامل ويُستبعد للصيانة
+    return null
   }
 
   return null
@@ -151,7 +161,8 @@ function computeBBox(geometry) {
       if (pt[1] < minY) minY = pt[1]
       if (pt[1] > maxY) maxY = pt[1]
     }
-    return [minX, minY, maxX, maxY]
+    const pad = 0.003 // ~330m safety buffer for line proximity calculations
+    return [minX - pad, minY - pad, maxX + pad, maxY + pad]
   }
   return null
 }
@@ -341,6 +352,33 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
     }
   }
 
+  // قاعدة النمال: التأكد من البلاغات التي تقع على الخطوط الموجودة بالطبقة واستبعاد البقية للصيانة
+  if (hasValidContractor(report.contractorName) && normalizeArabic(report.contractorName).toLowerCase().includes('نمال')) {
+    const nimalMatch = candidates.find(c => c.project && (
+      String(c.project.id) === '61' || 
+      normalizeArabic(c.project.contractor || '').toLowerCase().includes('نمال')
+    ))
+
+    if (nimalMatch) {
+      return {
+        matched: true,
+        project: nimalMatch.project,
+        confidence: nimalMatch.confidence,
+        reason: nimalMatch.reason,
+        shouldReview: false
+      }
+    }
+
+    // إذا لم يقع البلاغ على خطوط العقد 26 المرحلة الرابعة أو مشاريع النمال المعتمدة -> يُستبعد لأنه تابع للصيانة
+    return {
+      matched: false,
+      excluded: true,
+      excludedReason: 'خارج مسار خطوط المشروع المعتمدة (تابع للصيانة)',
+      confidence: 0,
+      reason: 'outside_nimal_lines_maintenance'
+    }
+  }
+
   // قاعدة صارمة: إذا كان للبلاغ إحداثيات جغرافية داخل الرياض ولا يقع في أي نطاق مكاني لمشاريع KMZ، يُستبعد فوراً
   if (hasCoords && !isGovReport && !hasAnySpatialMatch) {
     return {
@@ -504,8 +542,11 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         const m = matchGovernorateFeatureToProject(f, projects)
         return m && String(m.id).trim() === String(project.id).trim()
       })
+    } else if (String(project.id).trim() === '61' || (project.name?.includes('المرحلة الرابعة') && project.contractor?.includes('النمال'))) {
+      // مشروع النمال - عقد 26 المرحلة الرابعة: ربطه مباشرة بكافة خطوط النمال المعتمدة
+      project._kmzFeatures = ongoingFeatures.filter(f => f.properties?.isNimalLines || f.properties?.kmzFile?.includes('المرحلة الرابعة') || f.properties?.projectId === '61')
     } else {
-      project._kmzFeatures = ongoingFeatures.filter(f => !f.properties?.isGovernorate && matchProjectToFeature(project, f))
+      project._kmzFeatures = ongoingFeatures.filter(f => !f.properties?.isGovernorate && !f.properties?.isNimalLines && matchProjectToFeature(project, f))
     }
   }
 

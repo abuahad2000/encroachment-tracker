@@ -63,7 +63,8 @@ export async function buildData(customReportsFile = null) {
       'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)',
       'خارج النطاق الجغرافي للمشاريع (غير تابع لنطاق مكاني)',
       'المقاول بملف التعديات لا يتوافق مع مدير البرنامج/المشروع',
-      'بلاغ شبكة مياه يقع ضمن نطاق مشروع صرف صحي (عدم تطابق نوع الخدمة)'
+      'بلاغ شبكة مياه يقع ضمن نطاق مشروع صرف صحي (عدم تطابق نوع الخدمة)',
+      'خارج مسار خطوط المشروع المعتمدة (تابع للصيانة)'
     ]
     for (const [k, v] of overridesMap.entries()) {
       if (v.excluded && AUTOMATED_EXCLUSIONS.includes(v.reason)) {
@@ -135,7 +136,10 @@ export async function buildData(customReportsFile = null) {
         const cFName = cleanStr(fName)
 
         let matched = null
-        if (op) {
+        if (f.properties?.isNimalLines || f.properties?.projectId === '61') {
+          matched = projects.find(p => String(p.id).trim() === '61' || (p.name?.includes('المرحلة الرابعة') && p.contractor?.includes('النمال')))
+        }
+        if (!matched && op) {
           matched = projects.find(p => p.operationNumber && p.operationNumber.trim() === op.trim())
         }
         if (!matched && cFName) {

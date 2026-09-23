@@ -223,6 +223,87 @@ export async function parseGovernoratesKMZ(govDir) {
   }
 }
 
+// استخراج خطوط عقد النمال المرحلة الرابعة من ملف KMZ
+export async function parseNimalLinesKMZ(filePath) {
+  const features = []
+  if (!fs.existsSync(filePath)) return features
+
+  try {
+    const buffer = fs.readFileSync(filePath)
+    const zip = new JSZip()
+    await zip.loadAsync(buffer)
+
+    const kmlFile = zip.file('doc.kml') || Object.values(zip.files).find(zf => zf.name.endsWith('.kml'))
+    if (!kmlFile) return features
+
+    const kmlContent = await kmlFile.async('string')
+    const placemarkRegex = /<Placemark[^>]*>([\s\S]*?)<\/Placemark>/g
+    let match
+
+    while ((match = placemarkRegex.exec(kmlContent)) !== null) {
+      const placemark = match[1]
+      const nameMatch = placemark.match(/<name[^>]*>([\s\S]*?)<\/name>/)
+      let name = nameMatch ? nameMatch[1].trim() : 'خط صرف صحي'
+      name = name.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim()
+
+      let geometry = null
+
+      // LineString
+      const lineMatch = placemark.match(/<LineString[^>]*>[\s\S]*?<coordinates>([^<]*)<\/coordinates>/)
+      if (lineMatch) {
+        const coordStr = lineMatch[1].trim()
+        const coords = coordStr.split(/[\s\n]+/).map(c => {
+          const parts = c.split(',').map(Number)
+          return parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) ? [parts[0], parts[1]] : null
+        }).filter(Boolean)
+
+        if (coords.length >= 2) {
+          geometry = { type: 'LineString', coordinates: coords }
+        }
+      }
+
+      // Polygon
+      if (!geometry) {
+        const polyMatch = placemark.match(/<Polygon[^>]*>[\s\S]*?<outerBoundaryIs>[\s\S]*?<coordinates>([^<]*)<\/coordinates>/)
+        if (polyMatch) {
+          const coordStr = polyMatch[1].trim()
+          const coords = coordStr.split(/[\s\n]+/).map(c => {
+            const parts = c.split(',').map(Number)
+            return parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) ? [parts[0], parts[1]] : null
+          }).filter(Boolean)
+
+          if (coords.length >= 3) {
+            geometry = { type: 'Polygon', coordinates: [coords] }
+          }
+        }
+      }
+
+      if (geometry && name !== 'Unknown') {
+        features.push({
+          type: 'Feature',
+          geometry,
+          properties: {
+            name,
+            folder: 'Lines (16.33 km)',
+            sector: 'sanitation',
+            kmzFile: path.basename(filePath),
+            projectName: 'عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة',
+            contractor: 'شركة النمال للمقاولات مساهمة مقفلة',
+            programManager: 'عبدالله الأسود العنزي',
+            projectId: '61',
+            isOngoing: true,
+            isNimalLines: true
+          }
+        })
+      }
+    }
+  } catch (err) {
+    console.warn(`⚠️ Warning parsing Nimal KMZ ${filePath}:`, err.message)
+  }
+
+  return features
+}
+
 export async function parseAllKMZ() {
   const kmzDir = path.join(__dirname, '../../../KMZ')
   const geoJsonData = {
@@ -242,6 +323,13 @@ export async function parseAllKMZ() {
     const sanPath = path.join(kmzDir, '- مشاريع الصرف الصحي بمدينة الرياض.kmz')
     if (fs.existsSync(sanPath)) {
       geoJsonData.sanitation = await parseOngoingKMZ(sanPath, 'sanitation')
+    }
+
+    // Nimal Phase 4 lines (عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة)
+    const nimalPath = path.join(kmzDir, 'عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة.kmz')
+    if (fs.existsSync(nimalPath)) {
+      const nimalFeatures = await parseNimalLinesKMZ(nimalPath)
+      geoJsonData.sanitation.features.push(...nimalFeatures)
     }
 
     // Governorate projects (نطاق المحافظات)
