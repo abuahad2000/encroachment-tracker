@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react'
-import { toPng } from 'html-to-image'
+import { toPng, toCanvas } from 'html-to-image'
 import jsPDF from 'jspdf'
 
 export default function WeeklyExport() {
@@ -112,33 +112,63 @@ export default function WeeklyExport() {
     if (!contentRef.current) return
     setExporting(true)
     try {
-      const imgData = await toPng(contentRef.current, {
+      const element = contentRef.current
+      const canvas = await toCanvas(element, {
         quality: 0.98,
         pixelRatio: 2,
         backgroundColor: '#ffffff'
       })
 
-      const element = contentRef.current
-      const width = element.offsetWidth
-      const height = element.offsetHeight
-
       const pdf = new jsPDF({
-        orientation: height > width ? 'portrait' : 'landscape',
+        orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       })
 
-      const imgWidth = pdf.internal.pageSize.getWidth()
-      const imgHeight = (height * imgWidth) / width
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
 
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+      // Calculate the canvas height corresponding to one A4 page
+      const pageCanvasHeight = Math.floor(canvas.width * (pageHeight / pageWidth))
+      let renderedHeight = 0
+      let pageIndex = 0
+
+      while (renderedHeight < canvas.height) {
+        const sliceCanvas = document.createElement('canvas')
+        sliceCanvas.width = canvas.width
+        const currentSliceHeight = Math.min(pageCanvasHeight, canvas.height - renderedHeight)
+        sliceCanvas.height = currentSliceHeight
+
+        const ctx = sliceCanvas.getContext('2d')
+        ctx.drawImage(
+          canvas,
+          0, renderedHeight, canvas.width, currentSliceHeight, // source
+          0, 0, canvas.width, currentSliceHeight              // destination
+        )
+
+        const sliceData = sliceCanvas.toDataURL('image/png')
+        const slicePdfHeight = (currentSliceHeight * pageWidth) / canvas.width
+
+        if (pageIndex > 0) {
+          pdf.addPage()
+        }
+        pdf.addImage(sliceData, 'PNG', 0, 0, pageWidth, slicePdfHeight)
+
+        renderedHeight += currentSliceHeight
+        pageIndex++
+      }
+
       pdf.save(`تقرير-تعديات-مدراء-البرامج-${new Date().toISOString().split('T')[0]}.pdf`)
     } catch (e) {
       console.error('Error exporting PDF:', e)
-      alert('حدث خطأ أثناء تصدير PDF')
+      alert('حدث خطأ أثناء تصدير PDF: ' + (e.message || 'يرجى المحاولة مجدداً'))
     } finally {
       setExporting(false)
     }
+  }
+
+  const printDocument = () => {
+    window.print()
   }
 
   if (loading) {
@@ -153,7 +183,7 @@ export default function WeeklyExport() {
   return (
     <div className="space-y-6">
       {/* Top action bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">التقرير التنفيذي الشامل</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -185,7 +215,15 @@ export default function WeeklyExport() {
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-sm disabled:opacity-50"
           >
             <span>📄</span>
-            <span>{exporting ? 'جاري التصدير...' : 'تصدير PDF'}</span>
+            <span>{exporting ? 'جاري إنشاء PDF متعدد الصفحات...' : 'تصدير PDF'}</span>
+          </button>
+          <button
+            onClick={printDocument}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition text-sm"
+            title="طباعة مباشرة أو حفظ بصيغة PDF عبر المتصفح"
+          >
+            <span>🖨️</span>
+            <span>طباعة مباشرة</span>
           </button>
         </div>
       </div>
@@ -193,7 +231,7 @@ export default function WeeklyExport() {
       {/* Printable / Exportable Container */}
       <div
         ref={contentRef}
-        className="bg-white text-gray-900 p-8 sm:p-12 rounded-2xl shadow-xl border border-gray-200 space-y-8"
+        className="bg-white text-gray-900 p-8 sm:p-12 rounded-2xl shadow-xl border border-gray-200 space-y-8 print:shadow-none print:border-none print:p-0"
         style={{ direction: 'rtl', fontFamily: "'Sakkal Majalla', Arial, sans-serif" }}
       >
         {/* Header */}

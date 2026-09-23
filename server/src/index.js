@@ -5,9 +5,18 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
 import multer from 'multer'
-import { buildData, calculateStats, createManagersData } from './pipeline/buildData.js'
+import { buildData, calculateStats, createManagersData, normalizeManagerName } from './pipeline/buildData.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Atomic write helper to prevent data corruption
+function safeWriteJsonSync(filePath, data) {
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const tmpPath = `${filePath}.tmp.${Date.now()}`
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+  fs.renameSync(tmpPath, filePath)
+}
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -204,33 +213,51 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
     const uploadedPath = req.file.path
     const xlsxDir = path.join(__dirname, '../../XLSX')
-    const targetPath = path.join(xlsxDir, 'بلاغات تعدي مقاولي شركة المياه الوطنية 12 سبتمبر.xlsx')
+    const uploadsDir = path.join(__dirname, '../../uploads')
     const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
-    // Create XLSX directory if it doesn't exist
+    // 1. حذف الملف المحفوظ سابقاً لضمان عدم بقاء أي نسخة قديمة
+    if (fs.existsSync(uploadedReportsCopy)) {
+      try {
+        fs.unlinkSync(uploadedReportsCopy)
+        console.log('🗑️ تم حذف ملف البلاغات المحفوظ السابق')
+      } catch (e) {
+        console.warn('Could not remove previous reports.xlsx:', e.message)
+      }
+    }
+
+    // تنظيف مجلد uploads
+    if (fs.existsSync(uploadsDir)) {
+      try {
+        const files = fs.readdirSync(uploadsDir)
+        for (const f of files) {
+          const p = path.join(uploadsDir, f)
+          if (p !== uploadedPath) {
+            try { fs.unlinkSync(p) } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. اعتماد الملف الجديد مباشرة كملف فعال
     if (!fs.existsSync(xlsxDir)) {
       fs.mkdirSync(xlsxDir, { recursive: true })
     }
-
-    // Replace the default file and keep a copy as reports.xlsx
-    fs.copyFileSync(uploadedPath, targetPath)
     fs.copyFileSync(uploadedPath, uploadedReportsCopy)
     try {
-      fs.unlinkSync(uploadedPath) // Delete temp file
-    } catch (e) {
-      console.warn('Could not delete temp uploaded file:', e.message)
-    }
+      fs.unlinkSync(uploadedPath) // حذف الملف المؤقت
+    } catch (e) {}
 
-    // Trigger data rebuild directly in-process with persistent overrides preserved
-    console.log('📤 New reports file uploaded, rebuilding data...')
-    const result = await buildData()
+    // 3. معالجة الملف الجديد مباشرة وتحديث السجلات
+    console.log(`📤 جاري معالجة ملف الإكسيل الجديد مباشرة: ${uploadedReportsCopy}`)
+    const result = await buildData(uploadedReportsCopy)
 
-    // Regenerate executive pending Excel report with latest data
+    // 4. إعادة توليد التقرير التنفيذي فوراً بالبيانات الجديدة
     await runExecutiveExcelExport()
 
     res.json({
       success: true,
-      message: 'تم رفع الملف وإعادة معالجة البيانات وتحديث التقرير التنفيذي بنجاح مع الاحتفاظ بكافة الاستبعادات والتعديلات السابقة',
+      message: 'تم استلام الملف الجديد وحذف الملف المحفوظ السابق وإعادة معالجة كافة البيانات بنجاح',
       file: req.file.originalname,
       stats: result?.stats,
       timestamp: new Date().toISOString()
@@ -349,11 +376,13 @@ app.post('/api/override', async (req, res) => {
     overrides.push(entry)
   }
 
-  fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
+  safeWriteJsonSync(overridesPath, overrides)
   // Backup file for permanent persistence (uses overridesBackupPath declared above)
   try {
-    fs.writeFileSync(overridesBackupPath, JSON.stringify(overrides, null, 2))
-  } catch (e) {}
+    safeWriteJsonSync(overridesBackupPath, overrides)
+  } catch (e) {
+    console.warn('Warning backing up overrides:', e.message)
+  }
 
   // Update reports.json, stats.json, and managers.json immediately
   let updatedReport = null
@@ -397,7 +426,7 @@ app.post('/api/override', async (req, res) => {
             reports[rIdx].sector = customSector
           }
           if (customProgramManager && reports[rIdx].project) {
-            reports[rIdx].project.programManager = customProgramManager
+            reports[rIdx].project.programManager = normalizeManagerName(customProgramManager)
           }
           if (reports[rIdx].status === 'تحت معالجة المقاول') {
             reports[rIdx].actionCategory = 'تحت معالجة المقاول'
@@ -407,7 +436,7 @@ app.post('/api/override', async (req, res) => {
             reports[rIdx].actionCategory = 'تحت الإجراء'
           }
         }
-        fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2))
+        safeWriteJsonSync(reportsPath, reports)
         updatedReport = reports[rIdx]
 
         // Recompute stats and managers so dashboard and manager cards update immediately
@@ -415,8 +444,8 @@ app.post('/api/override', async (req, res) => {
           const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
           const updatedStats = calculateStats(reports, projects)
           const updatedManagers = createManagersData(projects, reports)
-          fs.writeFileSync(path.join(__dirname, '../data/generated/stats.json'), JSON.stringify(updatedStats, null, 2))
-          fs.writeFileSync(path.join(__dirname, '../data/generated/managers.json'), JSON.stringify(updatedManagers, null, 2))
+          safeWriteJsonSync(path.join(__dirname, '../data/generated/stats.json'), updatedStats)
+          safeWriteJsonSync(path.join(__dirname, '../data/generated/managers.json'), updatedManagers)
         }
       }
     } catch (e) {
@@ -909,6 +938,10 @@ app.get('/api/export/contractor-directory-excel', (req, res) => {
   const scriptPath = path.join(__dirname, '../../scripts/export_contractors_directory_excel.py')
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
   exec(`"${pythonCmd}" "${scriptPath}"`, (error) => {
+    if (error) {
+      console.error('Error generating contractor directory excel:', error.message)
+      return res.status(500).json({ error: 'فشل في تصدير ملف الإكسيل', details: error.message })
+    }
     const filePath = path.join(__dirname, '../../XLSX/سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
     if (fs.existsSync(filePath)) {
       res.download(path.resolve(filePath), 'سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')

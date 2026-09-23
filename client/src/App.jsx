@@ -29,7 +29,7 @@ export default function App() {
     <Router>
       <div className="min-h-screen bg-white dark:bg-slate-950 transition-colors">
         {/* Navigation Bar */}
-        <nav className="bg-blue-600 dark:bg-blue-900 text-white shadow-md">
+        <nav className="bg-blue-600 dark:bg-blue-900 text-white shadow-md print:hidden">
           <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
             <div className="flex gap-8">
               <Link to="/" className="font-bold text-lg hover:text-blue-100">

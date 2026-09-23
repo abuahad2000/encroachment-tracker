@@ -8,13 +8,13 @@ import { processReports } from './matchEngine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export async function buildData() {
+export async function buildData(customReportsFile = null) {
   console.log('🔄 جاري معالجة البيانات...')
 
   try {
     // 1. Parse data
     console.log('📖 قراءة البلاغات...')
-    const reports = parseReports()
+    const reports = parseReports(customReportsFile)
     console.log(`   ✓ تم قراءة ${reports.length} بلاغاً`)
 
     console.log('📖 قراءة المشاريع...')
@@ -233,8 +233,10 @@ export function calculateStats(reports, projects) {
 
   const topManagers = {}
   for (const r of pending) {
-    if (r.project?.programManager) {
-      topManagers[r.project.programManager] = (topManagers[r.project.programManager] || 0) + 1
+    const rawMgr = r.project?.programManager
+    if (rawMgr && rawMgr !== '-' && rawMgr !== 'غير محدد') {
+      const mgrName = normalizeManagerName(rawMgr)
+      topManagers[mgrName] = (topManagers[mgrName] || 0) + 1
     }
   }
 
@@ -263,6 +265,29 @@ export function calculateStats(reports, projects) {
   }
 }
 
+export const CANONICAL_MANAGERS = {
+  'تركي الاسمري': 'تركي ظافر يحيى الاسمري',
+  'تركي ظافر يحيى الاسمري': 'تركي ظافر يحيى الاسمري',
+  'عسكر لسلوم': 'عسكر لسلوم',
+  'عبدالله علي العنزي': 'عبدالله علي العنزي',
+  'عبدالله العنزي': 'عبدالله علي العنزي',
+  'سفر العتيبي': 'سفر العتيبي',
+  'علي الشهري': 'علي الشهري',
+  'أمجد الفالح': 'أمجد الفالح',
+  'عبدالله الأسود العنزي': 'عبدالله الأسود العنزي',
+  'عبدالله الأسود': 'عبدالله الأسود العنزي',
+  'علي القحطاني': 'علي القحطاني',
+  'شاكر الحقباني': 'شاكر الحقباني',
+  'سعيد الحارث': 'سعيد الحارث',
+  'فهد العنزي': 'فهد العنزي'
+}
+
+export function normalizeManagerName(name) {
+  if (!name) return ''
+  const trimmed = String(name).trim()
+  return CANONICAL_MANAGERS[trimmed] || trimmed
+}
+
 const MANAGER_SLUGS = {
   'تركي ظافر يحيى الاسمري': 'turki-alasmari',
   'تركي الاسمري': 'turki-alasmari',
@@ -283,10 +308,11 @@ const MANAGER_SLUGS = {
 export function createManagersData(projects, reports) {
   const managers = {}
 
-  // Group projects by manager
+  // Group projects by normalized manager
   for (const proj of projects) {
-    const mgr = proj.programManager
-    if (!mgr || mgr === '-' || mgr === 'غير محدد') continue
+    const rawMgr = proj.programManager
+    if (!rawMgr || rawMgr === '-' || rawMgr === 'غير محدد') continue
+    const mgr = normalizeManagerName(rawMgr)
     if (!managers[mgr]) {
       managers[mgr] = {
         name: mgr,
@@ -300,19 +326,29 @@ export function createManagersData(projects, reports) {
     managers[mgr].projects.push(proj)
   }
 
-  // Add reports to managers
+  // Add reports to managers (with normalization so short names and variances group accurately)
   for (const report of reports) {
     if (report.matched && report.project && !report.excluded) {
-      const mgr = report.project.programManager
-      if (managers[mgr]) {
-        managers[mgr].reports.push(report)
-        if (report.status === 'تحت معالجة المقاول') {
-          managers[mgr].pendingReports.push(report)
-        } else if (report.status === 'تمت المعالجة') {
-          managers[mgr].processedReports.push(report)
-        } else {
-          managers[mgr].inProgressReports.push(report)
+      const rawMgr = report.project.programManager
+      if (!rawMgr || rawMgr === '-' || rawMgr === 'غير محدد') continue
+      const mgr = normalizeManagerName(rawMgr)
+      if (!managers[mgr]) {
+        managers[mgr] = {
+          name: mgr,
+          projects: [],
+          reports: [],
+          pendingReports: [],
+          inProgressReports: [],
+          processedReports: []
         }
+      }
+      managers[mgr].reports.push(report)
+      if (report.status === 'تحت معالجة المقاول') {
+        managers[mgr].pendingReports.push(report)
+      } else if (report.status === 'تمت المعالجة') {
+        managers[mgr].processedReports.push(report)
+      } else {
+        managers[mgr].inProgressReports.push(report)
       }
     }
   }
@@ -325,7 +361,7 @@ export function createManagersData(projects, reports) {
       id: slug,
       slug,
       name: m.name,
-      scope: firstProj?.subProgram || 'متعدد',
+      scope: firstProj?.subProgram || firstProj?.scope || 'متعدد',
       subProgram: firstProj?.subProgram || '',
       activeProjects: m.projects.filter(p => p.status === 'جاري').length,
       deliveredProjects: m.projects.filter(p => p.status === 'مسلم ابتدائي').length,
