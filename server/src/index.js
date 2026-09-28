@@ -1197,14 +1197,17 @@ app.delete('/api/contractor-directory/:id', (req, res) => {
 
 // Export contractor directory Excel
 app.get('/api/export/contractor-directory-excel', (req, res) => {
+  const filePath = path.join(__dirname, '../../XLSX/سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
+  if (fs.existsSync(filePath) && req.query.force !== 'true') {
+    return res.download(path.resolve(filePath), 'سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
+  }
+
   const scriptPath = path.join(__dirname, '../../scripts/export_contractors_directory_excel.py')
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
   exec(`"${pythonCmd}" "${scriptPath}"`, (error) => {
     if (error) {
       console.error('Error generating contractor directory excel:', error.message)
-      return res.status(500).json({ error: 'فشل في تصدير ملف الإكسيل', details: error.message })
     }
-    const filePath = path.join(__dirname, '../../XLSX/سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
     if (fs.existsSync(filePath)) {
       res.download(path.resolve(filePath), 'سجل_بيانات_مقاولي_المشاريع_NWC.xlsx')
     } else {
@@ -1215,13 +1218,17 @@ app.get('/api/export/contractor-directory-excel', (req, res) => {
 
 // Export executive pending reports Excel
 app.get('/api/export/pending-excel', (req, res) => {
+  const filePath = path.join(__dirname, '../../XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+  if (fs.existsSync(filePath) && req.query.force !== 'true') {
+    return res.download(path.resolve(filePath), 'تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+  }
+
   const scriptPath = path.join(__dirname, '../../scripts/export_executive_excel.py')
   const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
   exec(`"${pythonCmd}" "${scriptPath}"`, (error) => {
     if (error) {
       console.warn('Warning generating executive excel:', error.message)
     }
-    const filePath = path.join(__dirname, '../../XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
     if (fs.existsSync(filePath)) {
       res.download(path.resolve(filePath), 'تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
     } else {
