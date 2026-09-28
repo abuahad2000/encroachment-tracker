@@ -1,19 +1,5 @@
 [
-  {
-    "reportId": 1,
-    "licenseNumber": "",
-    "latitude": 24.5336647033691,
-    "longitude": 46.64892578125,
-    "district": "الحزم",
-    "excluded": true,
-    "reason": "مستبعد من نطاق مشاريع مدير البرنامج",
-    "projectId": null,
-    "project": null,
-    "customContractor": "NULL",
-    "customSector": "مياه",
-    "isLocked": true,
-    "timestamp": "2026-09-21T19:30:26.921Z"
-  },
+
   {
     "reportId": 22,
     "licenseNumber": "",
