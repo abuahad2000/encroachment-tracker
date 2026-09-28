@@ -260,6 +260,13 @@ export default function MapView() {
     const props = feature.properties || {}
     const name = props.projectName || props.name || 'مشروع بدون اسم'
     const isGov = props.isGovernorate || (props.subProgram && props.subProgram.includes('المحافظات'))
+    const phase = classifyProjectPhase(props)
+    const phaseLabel = phase === 'capital' ? '🏗️ مشروع رأسمالي (جاري)' :
+                       phase === 'maintenance' ? '🔧 مشروع صيانة (مسلم)' :
+                       '❓ غير مصنف'
+    const phaseColor = phase === 'capital' ? '#059669' :
+                       phase === 'maintenance' ? '#f59e0b' : '#ef4444'
+
     let sectorLabel = ''
     let sectorBg = '#0284c7'
 
@@ -269,7 +276,7 @@ export default function MapView() {
       sectorBg = isWater ? '#d97706' : '#7c3aed'
     } else {
       const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه')) || (props.subProgram && props.subProgram.includes('مياه'))
-      sectorLabel = isWater ? '💧 قطاع المياه (جاري)' : '🚰 قطاع الصرف الصحي (جاري)'
+      sectorLabel = isWater ? '💧 قطاع المياه' : '🚰 قطاع الصرف الصحي'
       sectorBg = isWater ? '#0284c7' : '#059669'
     }
 
@@ -283,8 +290,13 @@ export default function MapView() {
 
     const content = `
       <div style="direction:rtl;text-align:right;font-family:sans-serif;padding:6px;min-width:240px;line-height:1.5;">
-        <div style="display:inline-block;background:${sectorBg};color:white;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:12px;margin-bottom:6px;">
-          ${sectorLabel}
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="background:${phaseColor};color:white;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:12px;">
+            ${phaseLabel}
+          </span>
+          <span style="background:${sectorBg};color:white;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:12px;">
+            ${sectorLabel}
+          </span>
         </div>
         <div style="font-weight:bold;font-size:13px;color:#0f172a;margin-bottom:6px;line-height:1.4;">
           ${name}
