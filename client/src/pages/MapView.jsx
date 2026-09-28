@@ -713,6 +713,27 @@ export default function MapView() {
             )
           })}
         </MapContainer>
+
+        {/* Map Legend */}
+        <div style={{ position: 'absolute', bottom: '20px', right: '20px', background: 'rgba(255, 255, 255, 0.95)', padding: '10px 14px', borderRadius: '12px', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', zIndex: 1000, fontSize: '11px', direction: 'rtl', backdropFilter: 'blur(4px)', border: '1px solid rgba(226, 232, 240, 0.8)' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#0f172a', fontSize: '12px' }}>مفتاح الخريطة</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <div style={{ width: '20px', height: '4px', background: '#0284c7', borderRadius: '2px' }}></div>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>مياه - رأسمالي</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <div style={{ width: '20px', height: '3px', background: '#94a3b8', borderRadius: '2px' }}></div>
+            <span style={{ color: '#64748b' }}>مياه - صيانة</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+            <div style={{ width: '20px', height: '4px', background: '#059669', borderRadius: '2px' }}></div>
+            <span style={{ color: '#1e293b', fontWeight: '600' }}>صرف - رأسمالي</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '20px', height: '3px', background: '#6b7280', borderRadius: '2px' }}></div>
+            <span style={{ color: '#64748b' }}>صرف - صيانة</span>
+          </div>
+        </div>
       </div>
 
       {/* KPI Cards */}
