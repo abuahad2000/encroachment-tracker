@@ -8,6 +8,7 @@ import ManagerDetail from './pages/ManagerDetail'
 import WeeklyExport from './pages/WeeklyExport'
 import Contractors from './pages/Contractors'
 import DistrictReports from './pages/DistrictReports'
+import ContractorOverlapAudit from './pages/ContractorOverlapAudit'
 import DarkModeToggle from './components/DarkModeToggle'
 
 export default function App() {
@@ -42,8 +43,9 @@ export default function App() {
                 <Link to="/district-reports" className="hover:text-blue-100 transition">تقارير الأحياء</Link>
                 <Link to="/map" className="hover:text-blue-100 transition">الخريطة</Link>
                 <Link to="/managers" className="hover:text-blue-100 transition">المدراء</Link>
-                <Link to="/export" className="hover:text-blue-100 transition">التصدير</Link>
                 <Link to="/contractors" className="hover:text-blue-100 transition font-bold bg-blue-700/60 hover:bg-blue-700 px-3 py-1 rounded-lg border border-blue-400/40">المقاولين</Link>
+                <Link to="/contractor-overlap-audit" className="hover:text-amber-200 transition text-xs font-bold bg-amber-500/30 hover:bg-amber-500/40 px-2.5 py-1 rounded-lg border border-amber-300/40">تدقيق التداخل ⚖️</Link>
+                <Link to="/export" className="hover:text-blue-100 transition">التصدير</Link>
               </div>
             </div>
             <DarkModeToggle isDark={isDark} toggle={toggleDark} />
@@ -57,6 +59,7 @@ export default function App() {
             <Route path="/reports" element={<ReportsTable />} />
             <Route path="/district-reports" element={<DistrictReports />} />
             <Route path="/contractors" element={<Contractors />} />
+            <Route path="/contractor-overlap-audit" element={<ContractorOverlapAudit />} />
             <Route path="/map" element={<MapView />} />
             <Route path="/managers" element={<ManagerCards />} />
             <Route path="/managers/:managerId" element={<ManagerDetail />} />

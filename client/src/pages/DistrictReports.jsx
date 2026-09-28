@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
+import { DistrictAnalytics } from '../utils/DistrictAnalytics'
+import { CacheManager } from '../utils/CacheManager'
 
 export default function DistrictReports() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedGovernorate, setSelectedGovernorate] = useState('')
   const [selectedDistrict, setSelectedDistrict] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -11,17 +14,28 @@ export default function DistrictReports() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
 
+  const loadReports = async (forceRefresh = false) => {
+    try {
+      if (forceRefresh) {
+        setRefreshing(true)
+        await CacheManager.invalidateCache('reports')
+      }
+      const data = await CacheManager.getWithCache(
+        'reports',
+        () => fetch('/api/reports').then(r => r.json()),
+        60
+      )
+      setReports(data || [])
+    } catch (e) {
+      console.error('Error fetching reports:', e)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
   useEffect(() => {
-    fetch('/api/reports')
-      .then(r => r.json())
-      .then(data => {
-        setReports(data || [])
-        setLoading(false)
-      })
-      .catch(e => {
-        console.error('Error fetching reports:', e)
-        setLoading(false)
-      })
+    loadReports()
   }, [])
 
   // 1. GovernorateSelect Options: قائمة المدن والمحافظات الفريدة
@@ -93,8 +107,44 @@ export default function DistrictReports() {
     const inProgress = filteredReports.filter(r => r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة').length
     const processed = filteredReports.filter(r => r.status === 'تمت المعالجة').length
     const excluded = filteredReports.filter(r => r.excluded).length
-    return { total, pending, inProgress, processed, excluded }
+    const totalDays = filteredReports.reduce((acc, r) => acc + (parseFloat(r.ageDays) || 0), 0)
+    const avgDelay = total > 0 ? Math.round(totalDays / total) : 0
+    return { total, pending, inProgress, processed, excluded, avgDelay }
   }, [filteredReports])
+
+  // 4 Chart datasets via DistrictAnalytics
+  const topDistricts = useMemo(() => DistrictAnalytics.getReportsByDistrict(filteredReports).slice(0, 7), [filteredReports])
+  const topDelayed = useMemo(() => DistrictAnalytics.getTopDelayedDistricts(filteredReports).slice(0, 7), [filteredReports])
+  const statusDist = useMemo(() => DistrictAnalytics.getReportsByStatus(filteredReports), [filteredReports])
+  const managerDist = useMemo(() => DistrictAnalytics.getReportsByManager(filteredReports).slice(0, 7), [filteredReports])
+
+  const handleExportCSV = () => {
+    if (filteredReports.length === 0) {
+      alert('لا توجد بيانات لتصديرها')
+      return
+    }
+    const headers = ['رقم البلاغ', 'المحافظة/المدينة', 'الحي', 'الشارع', 'المقاول', 'مدير البرنامج', 'الحالة', 'عمر البلاغ (يوم)', 'سبب الاستبعاد']
+    const rows = filteredReports.map(r => [
+      r.id,
+      `"${(r.city || '').replace(/"/g, '""')}"`,
+      `"${(r.district || '').replace(/"/g, '""')}"`,
+      `"${(r.street || '').replace(/"/g, '""')}"`,
+      `"${(r.customContractor || r.contractorName || r.project?.contractor || '').replace(/"/g, '""')}"`,
+      `"${(r.project?.programManager || '').replace(/"/g, '""')}"`,
+      `"${(r.status || '').replace(/"/g, '""')}"`,
+      r.ageDays || 0,
+      `"${(r.excludedReason || '').replace(/"/g, '""')}"`
+    ])
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `تقرير_الأحياء_NWC_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   // التصفح والصفحات
   const totalPages = Math.ceil(filteredReports.length / pageSize) || 1
@@ -122,19 +172,39 @@ export default function DistrictReports() {
             <div>
               <h1 className="text-2xl font-black">تقارير بلاغات الأحياء والمحافظات</h1>
               <p className="text-blue-100 text-xs mt-1">
-                استعراض وتدقيق بلاغات التعدي بحسب المدينة والحي المختار مع تصفية هرمية مترابطة
+                استعراض وتدقيق بلاغات التعدي بحسب المدينة والحي المختار مع تصفية هرمية مترابطة ورسوم بيانية ذكية
               </p>
             </div>
           </div>
         </div>
 
-        {/* مؤشرات سريعة */}
-        <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15 text-xs font-bold">
-          <span>📍 النتائج المطابقة:</span>
-          <span className="bg-white text-blue-900 px-2 py-0.5 rounded-lg font-black text-sm">
-            {filteredReports.length.toLocaleString('ar-SA')}
-          </span>
-          <span>بلاغ</span>
+        {/* أزرار الإجراءات والمؤشرات السريعة */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => loadReports(true)}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/20 transition disabled:opacity-50"
+            title="تحديث البيانات ومسح الذاكرة المؤقتة (Cache)"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            <span>{refreshing ? 'جاري التحديث...' : 'تحديث (مسح Cache)'}</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm transition"
+            title="تصدير جدول البلاغات المفلترة كملف CSV"
+          >
+            <span>📊</span>
+            <span>تصدير البيانات (CSV)</span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15 text-xs font-bold">
+            <span>📍 النتائج:</span>
+            <span className="bg-white text-blue-900 px-2 py-0.5 rounded-lg font-black text-sm">
+              {filteredReports.length.toLocaleString('ar-SA')}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -251,6 +321,234 @@ export default function DistrictReports() {
               🔄 إعادة تعيين الفلاتر
             </button>
           )}
+        </div>
+      </div>
+
+      {/* 4 Analytics Charts Section (DistrictAnalytics) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Chart 1: Top Districts by Reports (Bar Chart) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-black text-xs text-gray-900 dark:text-white">
+                <span>📊</span>
+                <span>الأحياء الأكثر بلاغات</span>
+              </div>
+              <span className="text-[10px] text-gray-400 font-bold">أعلى 7</span>
+            </div>
+            <div className="space-y-2.5">
+              {topDistricts.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs">لا توجد بيانات</div>
+              ) : (
+                topDistricts.map((item, idx) => {
+                  const maxVal = topDistricts[0]?.value || 1
+                  const pct = Math.round((item.value / maxVal) * 100)
+                  return (
+                    <div key={item.label} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold">
+                        <span className="text-gray-800 dark:text-gray-200 truncate max-w-[120px]" title={item.label}>
+                          {idx + 1}. {item.label}
+                        </span>
+                        <span className="text-blue-600 dark:text-blue-400 font-mono font-black">{item.value}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 2: Top Delayed Districts (Bar Chart) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-black text-xs text-gray-900 dark:text-white">
+                <span>⏱️</span>
+                <span>الأحياء الأكثر تأخراً</span>
+              </div>
+              <span className="text-[10px] text-red-500 font-bold">متوسط الأيام</span>
+            </div>
+            <div className="space-y-2.5">
+              {topDelayed.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs">لا توجد بيانات</div>
+              ) : (
+                topDelayed.map((item, idx) => {
+                  const maxVal = topDelayed[0]?.value || 1
+                  const pct = Math.round((item.value / maxVal) * 100)
+                  const isHigh = item.value > 60
+                  return (
+                    <div key={item.label} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold">
+                        <span className="text-gray-800 dark:text-gray-200 truncate max-w-[120px]" title={item.label}>
+                          {idx + 1}. {item.label}
+                        </span>
+                        <span className={`font-mono font-black ${isHigh ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {item.value} يوم
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${isHigh ? 'bg-red-500' : 'bg-amber-500'}`}
+                          style={{ width: `${pct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 3: Status Distribution (Pie / Donut Chart) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-black text-xs text-gray-900 dark:text-white">
+                <span>🎯</span>
+                <span>توزيع الحالات</span>
+              </div>
+              <span className="text-[10px] text-gray-400 font-bold">إجمالي: {filteredReports.length}</span>
+            </div>
+
+            {filteredReports.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-xs">لا توجد بيانات</div>
+            ) : (
+              <div className="space-y-3">
+                {/* Visual Segmented Progress Ring */}
+                <div className="flex items-center justify-center py-2">
+                  <div className="relative w-28 h-28 flex items-center justify-center">
+                    <svg className="w-28 h-28 -rotate-90 transform" viewBox="0 0 36 36">
+                      <path
+                        className="text-gray-100 dark:text-slate-800"
+                        strokeWidth="3.8"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      {(() => {
+                        const total = filteredReports.length || 1
+                        const pPct = (summaryStats.pending / total) * 100
+                        const ipPct = (summaryStats.inProgress / total) * 100
+                        const prPct = (summaryStats.processed / total) * 100
+                        const exPct = (summaryStats.excluded / total) * 100
+
+                        return (
+                          <>
+                            <path
+                              className="text-amber-500"
+                              strokeDasharray={`${pPct}, 100`}
+                              strokeWidth="3.8"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                              className="text-sky-500"
+                              strokeDasharray={`${ipPct}, 100`}
+                              strokeDashoffset={`-${pPct}`}
+                              strokeWidth="3.8"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                              className="text-emerald-500"
+                              strokeDasharray={`${prPct}, 100`}
+                              strokeDashoffset={`-${pPct + ipPct}`}
+                              strokeWidth="3.8"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                              className="text-red-500"
+                              strokeDasharray={`${exPct}, 100`}
+                              strokeDashoffset={`-${pPct + ipPct + prPct}`}
+                              strokeWidth="3.8"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                          </>
+                        )
+                      })()}
+                    </svg>
+                    <div className="absolute flex flex-col items-center justify-center text-center">
+                      <span className="text-xs font-black text-gray-900 dark:text-white">{filteredReports.length}</span>
+                      <span className="text-[9px] text-gray-400">بلاغ</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Donut Legend */}
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] font-bold">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                    <span className="text-gray-700 dark:text-gray-300">معلق ({summaryStats.pending})</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0"></span>
+                    <span className="text-gray-700 dark:text-gray-300">جاري ({summaryStats.inProgress})</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span className="text-gray-700 dark:text-gray-300">معالج ({summaryStats.processed})</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
+                    <span className="text-gray-700 dark:text-gray-300">مستبعد ({summaryStats.excluded})</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chart 4: Program Managers Distribution (Bar Chart) */}
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-gray-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 font-black text-xs text-gray-900 dark:text-white">
+                <span>👔</span>
+                <span>توزيع مدراء البرامج</span>
+              </div>
+              <span className="text-[10px] text-gray-400 font-bold">أعلى 7</span>
+            </div>
+            <div className="space-y-2.5">
+              {managerDist.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs">لا توجد بيانات</div>
+              ) : (
+                managerDist.map((item, idx) => {
+                  const maxVal = managerDist[0]?.value || 1
+                  const pct = Math.round((item.value / maxVal) * 100)
+                  return (
+                    <div key={item.label} className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-bold">
+                        <span className="text-gray-800 dark:text-gray-200 truncate max-w-[120px]" title={item.label}>
+                          {idx + 1}. {item.label}
+                        </span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-mono font-black">{item.value}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

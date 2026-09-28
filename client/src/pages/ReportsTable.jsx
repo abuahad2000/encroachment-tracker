@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { CacheManager } from '../utils/CacheManager'
 
 export default function ReportsTable() {
   const [reports, setReports] = useState([])
@@ -6,6 +7,9 @@ export default function ReportsTable() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('pending')
   const [sectorFilter, setSectorFilter] = useState('all') // 'all' | 'water' | 'sanitation'
+  const [selectedGovernorate, setSelectedGovernorate] = useState('all')
+  const [selectedDistrict, setSelectedDistrict] = useState('all')
+  const [viewMode, setViewMode] = useState('table') // 'table' | 'districts'
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedReport, setSelectedReport] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
@@ -18,11 +22,14 @@ export default function ReportsTable() {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState(null)
 
-  const reloadData = async () => {
+  const reloadData = async (forceRefresh = false) => {
     try {
+      if (forceRefresh) {
+        CacheManager.clearAllCaches()
+      }
       const [reportsData, projectsData] = await Promise.all([
-        fetch('/api/reports').then(r => r.json()),
-        fetch('/api/projects').then(r => r.json())
+        CacheManager.getWithCache('reports', () => fetch('/api/reports').then(r => r.json()), 60),
+        CacheManager.getWithCache('projects', () => fetch('/api/projects').then(r => r.json()), 300)
       ])
       setReports(reportsData || [])
       setProjects(projectsData || [])
@@ -38,7 +45,7 @@ export default function ReportsTable() {
       const res = await fetch('/api/refresh-data', { method: 'POST' })
       const data = await res.json()
       if (data.success) {
-        await reloadData()
+        await reloadData(true)
         setRefreshMessage('✅ تم تحديث البيانات والتقرير التنفيذي بنجاح')
         setTimeout(() => setRefreshMessage(null), 4500)
       } else {
@@ -199,6 +206,27 @@ export default function ReportsTable() {
     return { pending, inProgress, processed, noKmz, excluded }
   }, [reports])
 
+  // Unique governorates extracted from reports
+  const governoratesList = useMemo(() => {
+    const set = new Set()
+    reports.forEach(r => {
+      const city = (r.city || '').trim()
+      if (city && city !== 'NULL' && city !== '-') set.add(city)
+    })
+    return Array.from(set).sort()
+  }, [reports])
+
+  // Unique districts cascading from selected governorate
+  const districtsList = useMemo(() => {
+    const set = new Set()
+    reports.forEach(r => {
+      if (selectedGovernorate !== 'all' && (r.city || '').trim() !== selectedGovernorate) return
+      const d = (r.district || '').trim()
+      if (d && d !== 'NULL' && d !== '-') set.add(d)
+    })
+    return Array.from(set).sort()
+  }, [reports, selectedGovernorate])
+
   const filtered = useMemo(() => {
     let list = []
     if (activeTab === 'pending') {
@@ -228,6 +256,16 @@ export default function ReportsTable() {
       })
     }
 
+    // Cascading Governorate filter
+    if (selectedGovernorate !== 'all') {
+      list = list.filter(r => (r.city || '').trim() === selectedGovernorate)
+    }
+
+    // Cascading District filter
+    if (selectedDistrict !== 'all') {
+      list = list.filter(r => (r.district || '').trim() === selectedDistrict)
+    }
+
     if (!searchQuery.trim()) return list
     const q = searchQuery.toLowerCase().trim()
     return list.filter(r => {
@@ -238,7 +276,24 @@ export default function ReportsTable() {
       const mgr = (r.project?.programManager || '').toLowerCase()
       return idStr.includes(q) || dist.includes(q) || proj.includes(q) || cont.includes(q) || mgr.includes(q)
     })
-  }, [reports, activeTab, sectorFilter, searchQuery])
+  }, [reports, activeTab, sectorFilter, selectedGovernorate, selectedDistrict, searchQuery])
+
+  // Grouped reports by district for 'districts' viewMode
+  const reportsByDistrict = useMemo(() => {
+    const map = {}
+    filtered.forEach(r => {
+      const key = (r.district || r.city || 'غير محدد').trim()
+      if (!map[key]) {
+        map[key] = {
+          district: key,
+          city: r.city || 'الرياض',
+          items: []
+        }
+      }
+      map[key].items.push(r)
+    })
+    return Object.values(map).sort((a, b) => b.items.length - a.items.length)
+  }, [filtered])
 
   return (
     <div className="space-y-5">
@@ -391,12 +446,215 @@ export default function ReportsTable() {
             <span>مشاريع الصرف</span>
           </button>
         </div>
+
+        {/* Geographic Cascading Filters: Governorate & District */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Governorate Filter */}
+          <div className="flex items-center gap-1 bg-white dark:bg-gray-700 px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-600">
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-bold">🏛️ المحافظة:</span>
+            <select
+              value={selectedGovernorate}
+              onChange={(e) => {
+                setSelectedGovernorate(e.target.value)
+                setSelectedDistrict('all')
+              }}
+              className="text-xs bg-transparent text-gray-800 dark:text-gray-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="all">كافة المحافظات ({governoratesList.length})</option>
+              {governoratesList.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* District Filter (Cascading) */}
+          <div className="flex items-center gap-1 bg-white dark:bg-gray-700 px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-600">
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-bold">🏡 الحي:</span>
+            <select
+              value={selectedDistrict}
+              onChange={(e) => setSelectedDistrict(e.target.value)}
+              className="text-xs bg-transparent text-gray-800 dark:text-gray-200 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="all">كافة الأحياء ({districtsList.length})</option>
+              {districtsList.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* View Mode Toggle: Table vs Districts */}
+        <div className="flex items-center gap-1 bg-white dark:bg-gray-700 p-1 rounded-xl border border-gray-200 dark:border-gray-600">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-1 text-xs rounded-lg font-bold transition flex items-center gap-1 ${viewMode === 'table' ? 'bg-blue-600 text-white shadow-xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+          >
+            <span>📋</span>
+            <span>جدول</span>
+          </button>
+          <button
+            onClick={() => setViewMode('districts')}
+            className={`px-3 py-1 text-xs rounded-lg font-bold transition flex items-center gap-1 ${viewMode === 'districts' ? 'bg-blue-600 text-white shadow-xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}
+          >
+            <span>🏘️</span>
+            <span>تجميع حسب الحي ({reportsByDistrict.length})</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mb-3"></div>
           <p className="text-gray-600 dark:text-gray-300 text-sm">جاري تحميل سجل البلاغات والمشاريع...</p>
+        </div>
+      ) : viewMode === 'districts' ? (
+        <div className="space-y-4">
+          {reportsByDistrict.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center text-gray-500">
+              لا توجد بلاغات تطابق الفلاتر المحددة
+            </div>
+          ) : (
+            reportsByDistrict.map((group) => {
+              const pendingCount = group.items.filter(r => r.status === 'تحت معالجة المقاول').length
+              const inProgressCount = group.items.filter(r => r.status !== 'تحت معالجة المقاول' && r.status !== 'تمت المعالجة').length
+              const processedCount = group.items.filter(r => r.status === 'تمت المعالجة').length
+              const excludedCount = group.items.filter(r => r.excluded).length
+
+              return (
+                <div key={group.district} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xs overflow-hidden">
+                  {/* District Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🏡</span>
+                      <div>
+                        <h3 className="text-base font-black text-gray-900 dark:text-white">
+                          {group.district}
+                        </h3>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {group.city || 'منطقة الرياض'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Stats badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                      <span className="bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 px-2.5 py-1 rounded-lg">
+                        الإجمالي: {group.items.length}
+                      </span>
+                      {pendingCount > 0 && (
+                        <span className="bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-lg">
+                          ⏳ معلق: {pendingCount}
+                        </span>
+                      )}
+                      {inProgressCount > 0 && (
+                        <span className="bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 px-2.5 py-1 rounded-lg">
+                          🔄 جاري: {inProgressCount}
+                        </span>
+                      )}
+                      {processedCount > 0 && (
+                        <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-lg">
+                          ✅ معالج: {processedCount}
+                        </span>
+                      )}
+                      {excludedCount > 0 && (
+                        <span className="bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 px-2.5 py-1 rounded-lg">
+                          🚫 مستبعد: {excludedCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reports Table for this District */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right text-xs">
+                      <thead className="bg-gray-100/50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 font-bold border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                          <th className="px-3 py-2 text-center w-20">رقم البلاغ</th>
+                          <th className="px-2 py-2 text-center w-16">القطاع</th>
+                          <th className="px-3 py-2 min-w-[200px]">المشروع المسند</th>
+                          <th className="px-3 py-2 min-w-[120px]">مدير البرنامج</th>
+                          <th className="px-3 py-2 min-w-[140px]">المقاول</th>
+                          <th className="px-2 py-2 text-center w-24">الحالة</th>
+                          <th className="px-2 py-2 text-center w-20">التأخير</th>
+                          <th className="px-2 py-2 text-center w-24">إجراءات</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+                        {group.items.map((r) => {
+                          const isWater = (r.sector === 'مياه') || (r.project?.name?.includes('مياه') || r.project?.subProgram?.includes('مياه'))
+                          const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
+
+                          return (
+                            <tr key={r.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-750 transition">
+                              <td className="px-3 py-2 text-center font-mono font-bold text-gray-900 dark:text-white">
+                                {r.id}
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${isWater ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                                  {isWater ? '💧 مياه' : '🚰 صرف'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">
+                                {r.project?.name || (r.excluded ? r.excludedReason : 'غير مسند')}
+                              </td>
+                              <td className="px-3 py-2 font-bold text-gray-800 dark:text-gray-200">
+                                {r.excluded ? '-' : (r.project?.programManager || '-')}
+                              </td>
+                              <td className="px-3 py-2 text-gray-800 dark:text-gray-200">
+                                {effectiveContractor}
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                  r.excluded ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' :
+                                  r.status === 'تحت معالجة المقاول' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                                  r.status === 'تمت المعالجة' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+                                  'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300'
+                                }`}>
+                                  {r.excluded ? '🚫 مستبعد' : r.status}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2 text-center font-bold text-gray-700 dark:text-gray-300">
+                                {r.ageDays || 0} يوم
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {r.latitude && r.longitude && (
+                                    <a
+                                      href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 text-emerald-600 hover:bg-emerald-100 rounded"
+                                      title="فتح الخريطة"
+                                    >
+                                      📍
+                                    </a>
+                                  )}
+                                  <button
+                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                                    onClick={() => { setSelectedReport(r); setShowDetails(true); }}
+                                    title="عرض التفاصيل"
+                                  >
+                                    👁️
+                                  </button>
+                                  <button
+                                    onClick={() => openEditModal(r)}
+                                    title="تعديل"
+                                    className="p-1 text-amber-600 hover:bg-amber-100 rounded"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
@@ -406,8 +664,12 @@ export default function ReportsTable() {
                 <tr>
                   <th className="px-3 py-3 text-center whitespace-nowrap w-24">رقم البلاغ</th>
                   <th className="px-2 py-3 text-center whitespace-nowrap w-20">القطاع</th>
-                  <th className="px-3 py-3 whitespace-nowrap min-w-[140px]">الحي / المدينة</th>
-                  <th className="px-3 py-3 min-w-[280px] max-w-[420px]">المشروع المسند</th>
+                  <th className="px-3 py-3 whitespace-nowrap min-w-[140px]">
+                    {activeTab === 'excluded' ? '🏛️ الحي / المحافظة' : 'الحي / المدينة'}
+                  </th>
+                  <th className="px-3 py-3 min-w-[280px] max-w-[420px]">
+                    {activeTab === 'excluded' ? 'سبب الاستبعاد / الملاحظة' : 'المشروع المسند'}
+                  </th>
                   <th className="px-3 py-3 min-w-[140px] whitespace-nowrap">مدير البرنامج</th>
                   <th className="px-3 py-3 min-w-[180px]">المقاول</th>
                   <th className="px-2 py-3 text-center whitespace-nowrap w-28">المصدر</th>
@@ -449,6 +711,11 @@ export default function ReportsTable() {
                         <span className="font-bold text-gray-900 dark:text-white">
                           {r.district || r.city}
                         </span>
+                        {r.city && r.city !== r.district && (
+                          <span className="text-gray-400 dark:text-gray-500 mr-1 text-[11px]">
+                            • {r.city}
+                          </span>
+                        )}
                         {r.street && (
                           <span className="text-gray-400 dark:text-gray-500 mr-1 text-[11px]">
                             ({r.street})
@@ -456,15 +723,23 @@ export default function ReportsTable() {
                         )}
                       </td>
 
-                      {/* المشروع المسند كامل ومنسق بدون قص */}
+                      {/* المشروع المسند كامل ومنسق أو سبب الاستبعاد */}
                       <td className="px-3 py-3 min-w-[280px] max-w-[420px] whitespace-normal leading-relaxed text-right" title={r.project?.name}>
-                        <span className={`font-semibold block ${r.excluded ? 'text-amber-800 dark:text-amber-300 text-xs' : 'text-gray-900 dark:text-gray-100 text-xs'}`}>
-                          {r.project?.name || (r.excluded ? r.excludedReason : 'غير مسند')}
-                        </span>
-                        {r.project?.operationNumber && (
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono block mt-0.5">
-                            {r.project.operationNumber}
+                        {r.excluded ? (
+                          <span className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-1 rounded-lg border border-red-200 dark:border-red-900 inline-block text-xs">
+                            🚫 {r.excludedReason || 'مستبعد من نطاق مشاريع مدير البرنامج'}
                           </span>
+                        ) : (
+                          <>
+                            <span className="font-semibold block text-gray-900 dark:text-gray-100 text-xs">
+                              {r.project?.name || 'غير مسند'}
+                            </span>
+                            {r.project?.operationNumber && (
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono block mt-0.5">
+                                {r.project.operationNumber}
+                              </span>
+                            )}
+                          </>
                         )}
                       </td>
 

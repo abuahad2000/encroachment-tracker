@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { MapContainer, TileLayer, GeoJSON as GeoJSONLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { CacheManager } from '../utils/CacheManager'
 
 function MapViewUpdater({ activeTab }) {
   const map = useMap()
@@ -18,28 +19,81 @@ function MapViewUpdater({ activeTab }) {
 export default function MapView() {
   const [rawData, setRawData] = useState(null)
   const [reports, setReports] = useState([])
-  const [activeTab, setActiveTab] = useState('all') // 'water' | 'sanitation' | 'all'
+  const [excludedReports, setExcludedReports] = useState([])
+  const [programManagersList, setProgramManagersList] = useState([])
+  const [showExcludedPins, setShowExcludedPins] = useState(false)
+  const [selectedAssignManager, setSelectedAssignManager] = useState({})
+  const [isAssigning, setIsAssigning] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [activeTab, setActiveTab] = useState('all') // 'capital-water' | 'maintenance-water' | ...
   const [searchQuery, setSearchQuery] = useState('')
   const [showReportPins, setShowReportPins] = useState(true)
   const [pinStatusFilter, setPinStatusFilter] = useState('contractor') // 'contractor' | 'in_progress' | 'all'
   const [selectedManager, setSelectedManager] = useState('all')
   const [loading, setLoading] = useState(true)
 
+  const fetchData = async (forceRefresh = false) => {
+    try {
+      if (forceRefresh) {
+        setRefreshing(true)
+        CacheManager.clearAllCaches()
+      }
+      const [layersData, reportsData, excludedData, managersData] = await Promise.all([
+        fetch('/api/layers').then(r => r.json()),
+        CacheManager.getWithCache('reports', () => fetch('/api/reports').then(r => r.json()), 60),
+        CacheManager.getWithCache('projects_excluded', () => fetch('/api/projects/excluded').then(r => r.json()).catch(() => []), 120),
+        CacheManager.getWithCache('program_managers', () => fetch('/api/program-managers').then(r => r.json()).catch(() => []), 600)
+      ])
+      setRawData(layersData)
+      setReports(reportsData || [])
+      setExcludedReports(excludedData || [])
+      setProgramManagersList(managersData || [])
+      setLoading(false)
+    } catch (e) {
+      console.error('Error fetching data for map:', e)
+      setLoading(false)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   useEffect(() => {
-    Promise.all([
-      fetch('/api/layers').then(r => r.json()),
-      fetch('/api/reports').then(r => r.json())
-    ])
-      .then(([layersData, reportsData]) => {
-        setRawData(layersData)
-        setReports(reportsData || [])
-        setLoading(false)
-      })
-      .catch(e => {
-        console.error('Error fetching data for map:', e)
-        setLoading(false)
-      })
+    fetchData()
   }, [])
+
+  const handleAssignReport = async (reportId) => {
+    const targetManagerId = selectedAssignManager[reportId]
+    if (!targetManagerId) {
+      alert('يرجى اختيار مدير البرنامج أولاً')
+      return
+    }
+    setIsAssigning(true)
+    try {
+      const res = await fetch('/api/reports/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId,
+          targetManagerId,
+          assignedBy: 'خريطة النطاقات الجغرافية',
+          timestamp: new Date().toISOString()
+        })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        alert('تم إسناد البلاغ بنجاح وتحديث قاعدة البيانات')
+        await CacheManager.invalidateCache('reports')
+        await CacheManager.invalidateCache('projects_excluded')
+        await fetchData(true)
+      } else {
+        alert('فشل إسناد البلاغ: ' + (data.error || 'خطأ غير معروف'))
+      }
+    } catch (e) {
+      alert('خطأ في الاتصال: ' + e.message)
+    } finally {
+      setIsAssigning(false)
+    }
+  }
 
   // Icon for pending encroachment reports (Amber pin for contractor, Sky pin for in-progress)
   const getReportIcon = (status) => {
@@ -76,6 +130,34 @@ export default function MapView() {
       `,
       iconSize: [24, 24],
       iconAnchor: [12, 12],
+      popupAnchor: [0, -14]
+    })
+  }
+
+  // Icon for excluded projects (Amber pin with 🚫 symbol)
+  const getExcludedIcon = () => {
+    return L.divIcon({
+      className: 'custom-excluded-pin',
+      html: `
+        <div style="
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+          border: 2px solid #ffffff;
+          border-radius: 50%;
+          width: 26px;
+          height: 26px;
+          box-shadow: 0 0 10px rgba(245, 158, 11, 0.8), 0 2px 4px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 13px;
+          cursor: pointer;
+        ">
+          🚫
+        </div>
+      `,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
       popupAnchor: [0, -14]
     })
   }
@@ -397,24 +479,36 @@ export default function MapView() {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="w-full lg:w-80">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="بحث في المشاريع، المقاول، أو البلاغ..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs"
-              >
-                ✕
-              </button>
-            )}
+        {/* Actions & Search */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => fetchData(true)}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition disabled:opacity-50"
+            title="تحديث الخريطة ومسح الذاكرة المؤقتة"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            <span>{refreshing ? 'جاري التحديث...' : 'تحديث الخريطة (مسح Cache)'}</span>
+          </button>
+
+          <div className="w-full sm:w-72">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="بحث في المشاريع، المقاول، أو البلاغ..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-2.5 text-gray-400 hover:text-gray-600 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -523,6 +617,23 @@ export default function MapView() {
             <span>{showReportPins ? 'إخفاء النقاط' : 'إظهار نقاط البلاغات'}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showReportPins ? 'bg-red-800 text-white font-mono' : 'bg-gray-200 dark:bg-gray-600'}`}>
               {displayedReportPins.length}
+            </span>
+          </button>
+
+          {/* Toggle Excluded Projects Layer Button */}
+          <button
+            onClick={() => setShowExcludedPins(!showExcludedPins)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+              showExcludedPins
+                ? 'bg-amber-600 text-white ring-2 ring-amber-300 dark:ring-amber-900'
+                : 'bg-white dark:bg-gray-700 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+            }`}
+            title="إظهار البلاغات المستبعدة من النطاق مع إمكانية إعادة الإسناد والتحديث الحقيقي"
+          >
+            <span>🚫</span>
+            <span>{showExcludedPins ? 'إخفاء المستبعدة' : 'المشاريع المستبعدة'}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showExcludedPins ? 'bg-amber-800 text-white font-mono' : 'bg-amber-100 dark:bg-amber-950'}`}>
+              {excludedReports.length}
             </span>
           </button>
 
@@ -707,6 +818,95 @@ export default function MapView() {
                         <span>فتح الموقع في خرائط Google</span>
                       </a>
                     )}
+                  </div>
+                </Popup>
+              </Marker>
+            )
+          })}
+
+          {/* Excluded Projects Layer with Assignment Mechanism */}
+          {showExcludedPins && excludedReports.map((r, idx) => {
+            if (!r.latitude || !r.longitude) return null
+            const reportId = r.id || idx
+            return (
+              <Marker
+                key={`ex-${reportId}`}
+                position={[r.latitude, r.longitude]}
+                icon={getExcludedIcon()}
+              >
+                <Popup>
+                  <div style={{ direction: 'rtl', textAlign: 'right', fontFamily: 'sans-serif', minWidth: '260px', padding: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ background: '#fef3c7', color: '#b45309', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold' }}>
+                        🚫 بلاغ مستبعد #{r.id}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>{r.city}</span>
+                    </div>
+
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#0f172a', marginBottom: '4px' }}>
+                      {r.name || `بلاغ #${r.id}`}
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: '#334155', marginBottom: '2px' }}>
+                      <strong>الحي:</strong> {r.district || 'غير محدد'}
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: '#334155', marginBottom: '2px' }}>
+                      <strong>المقاول:</strong> {r.contractor || 'غير محدد'}
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: '#dc2626', background: '#fef2f2', padding: '6px', borderRadius: '6px', margin: '6px 0', border: '1px solid #fecaca' }}>
+                      <strong>سبب الاستبعاد:</strong> {r.excludedReason || 'مستبعد من النطاق'}
+                    </div>
+
+                    {/* Assignment Mechanism */}
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '8px', marginTop: '6px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#1e293b', display: 'block', marginBottom: '4px' }}>
+                        إسناد لمدير برنامج:
+                      </label>
+                      <select
+                        value={selectedAssignManager[r.id] || ''}
+                        onChange={(e) => setSelectedAssignManager(prev => ({ ...prev, [r.id]: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px',
+                          fontSize: '11px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          marginBottom: '8px',
+                          direction: 'rtl'
+                        }}
+                      >
+                        <option value="">-- اختر مدير البرنامج --</option>
+                        {programManagersList.map((mgr) => (
+                          <option key={mgr} value={mgr}>{mgr}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => handleAssignReport(r.id)}
+                        disabled={isAssigning || !selectedAssignManager[r.id]}
+                        style={{
+                          width: '100%',
+                          padding: '6px 12px',
+                          background: selectedAssignManager[r.id] ? '#10b981' : '#94a3b8',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          cursor: selectedAssignManager[r.id] ? 'pointer' : 'not-allowed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          boxShadow: selectedAssignManager[r.id] ? '0 1px 3px rgba(16, 185, 129, 0.3)' : 'none'
+                        }}
+                      >
+                        <span>{isAssigning ? '⏳' : '✅'}</span>
+                        <span>{isAssigning ? 'جاري الإسناد في قاعدة البيانات...' : 'إسناد البلاغ وتثبيته'}</span>
+                      </button>
+                    </div>
                   </div>
                 </Popup>
               </Marker>

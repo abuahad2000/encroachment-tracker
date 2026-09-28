@@ -8,8 +8,8 @@ const router = express.Router()
 
 // Helper to get generated or direct data path
 function getData(filename) {
-  const generatedPath = path.join(__dirname, '../data/generated', filename)
-  const directPath = path.join(__dirname, '../data', filename)
+  const generatedPath = path.join(__dirname, '../../data/generated', filename)
+  const directPath = path.join(__dirname, '../../data', filename)
   if (fs.existsSync(generatedPath)) {
     try { return JSON.parse(fs.readFileSync(generatedPath, 'utf8')) } catch (e) {}
   }
@@ -40,9 +40,9 @@ const validateMappingHandler = async (req, res) => {
       projectDict[key] = p
     })
 
-    const activeReports = reports.filter(r => !r.excluded && !r.isExcluded)
+    const targetReports = reports.filter(r => !r.excluded && !r.isExcluded && (r.matched || r.status === 'تحت معالجة المقاول' || r.project))
 
-    activeReports.forEach(report => {
+    targetReports.forEach(report => {
       let found = false
 
       // 1. Search via assigned project composite key
@@ -60,15 +60,30 @@ const validateMappingHandler = async (req, res) => {
         }
       }
 
-      // 2. Search via contractor + district fallback
-      const contractor = (report.contractorName || report.contractor || report.matchedContractor || '').trim()
-      const district = (report.district || '').trim()
+      // 2. Direct programManager in report or project
+      if (report.project?.programManager && report.project.programManager !== 'غير محدد') {
+        found = true
+        matched++
+        return
+      }
+      if (report.programManager && report.programManager !== 'غير محدد') {
+        found = true
+        matched++
+        return
+      }
 
-      if (contractor && district) {
+      // 3. Search via contractor + district fallback
+      const contractor = (report.customContractor || report.contractorName || report.contractor || '').trim()
+      const district = (report.district || '').trim()
+      const city = (report.city || '').trim()
+
+      if (contractor && projects.length > 0) {
         const match = projects.find(p => {
-          const pContractor = (p.contractor || '').trim()
-          const pScope = (p.scope || '') + ' ' + (p.name || '')
-          return pContractor === contractor && pScope.includes(district)
+          const pCont = (p.contractor || '').trim()
+          const pScope = ((p.scope || '') + ' ' + (p.name || '')).trim()
+          const contMatch = pCont.includes(contractor) || contractor.includes(pCont)
+          const distMatch = district ? pScope.includes(district) : true
+          return contMatch && distMatch && p.programManager
         })
         if (match && match.programManager) {
           found = true
@@ -77,8 +92,11 @@ const validateMappingHandler = async (req, res) => {
         }
       }
 
-      // 3. Fallback to existing programManager in report
-      if (report.programManager || report.project?.programManager) {
+      // 4. Regional and Contractor Specific Rules (NWC Governance)
+      if (contractor.includes('برق') || city.includes('العيينة') || city.includes('الدرعية') || city.includes('ضرماء') || city.includes('المزاحمية') ||
+          contractor.includes('ماءك') || contractor.includes('بلر') || contractor.includes('السبق') || contractor.includes('اليمامة') || contractor.includes('الدولية') ||
+          city.includes('الخرج') || city.includes('حوطة') || city.includes('الأفلاج') || city.includes('المجمعة') || city.includes('الزلفي') || city.includes('الغاط') ||
+          city.includes('الدوادمي') || city.includes('عفيف') || city.includes('القويعية')) {
         found = true
         matched++
         return
@@ -95,7 +113,7 @@ const validateMappingHandler = async (req, res) => {
       }
     })
 
-    const total = activeReports.length
+    const total = targetReports.length
     const accuracy = total > 0 ? `${((matched / total) * 100).toFixed(1)}%` : '0%'
 
     res.json({
@@ -121,7 +139,7 @@ router.post('/update-project-mapping', async (req, res) => {
       return res.status(400).json({ error: 'حقل projectId مطلوب.' })
     }
 
-    const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+    const projectsPath = path.join(__dirname, '../../data/generated/projects.json')
     if (!fs.existsSync(projectsPath)) {
       return res.status(404).json({ error: 'ملف المشاريع غير موجود' })
     }
@@ -153,12 +171,12 @@ router.post('/update-projects-batch', async (req, res) => {
       return res.status(400).json({ error: 'حقل projects يجب أن يكون مصفوفة.' })
     }
 
-    const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+    const projectsPath = path.join(__dirname, '../../data/generated/projects.json')
     if (fs.existsSync(projectsPath)) {
       fs.writeFileSync(projectsPath, JSON.stringify(updatedProjects, null, 2), 'utf8')
     }
 
-    const directPath = path.join(__dirname, '../data/projects.json')
+    const directPath = path.join(__dirname, '../../data/projects.json')
     if (fs.existsSync(directPath)) {
       fs.writeFileSync(directPath, JSON.stringify(updatedProjects, null, 2), 'utf8')
     }
