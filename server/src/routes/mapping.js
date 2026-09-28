@@ -145,4 +145,28 @@ router.post('/update-project-mapping', async (req, res) => {
   }
 })
 
+// Endpoint for batch updating normalized projects
+router.post('/update-projects-batch', async (req, res) => {
+  try {
+    const { projects: updatedProjects } = req.body
+    if (!Array.isArray(updatedProjects)) {
+      return res.status(400).json({ error: 'حقل projects يجب أن يكون مصفوفة.' })
+    }
+
+    const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+    if (fs.existsSync(projectsPath)) {
+      fs.writeFileSync(projectsPath, JSON.stringify(updatedProjects, null, 2), 'utf8')
+    }
+
+    const directPath = path.join(__dirname, '../data/projects.json')
+    if (fs.existsSync(directPath)) {
+      fs.writeFileSync(directPath, JSON.stringify(updatedProjects, null, 2), 'utf8')
+    }
+
+    res.json({ success: true, count: updatedProjects.length, message: 'تم توحيد وحفظ بيانات المشاريع بنجاح' })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router
