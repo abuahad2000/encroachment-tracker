@@ -202,34 +202,44 @@ export default function MapView() {
     })
   }, [pendingReports, contractorPendingReports, inProgressReports, pinStatusFilter, showReportPins, activeTab, selectedManager, searchQuery])
 
-  const isMaintenanceFeature = (f) => {
-    const name = (f?.properties?.name || f?.properties?.projectName || '').toLowerCase()
-    const status = (f?.properties?.status || '').toLowerCase()
-    const folder = (f?.properties?.folder || '').toLowerCase()
-    return status.includes('مسلم') || status.includes('صيانة') || name.includes('صيانة') || name.includes('إحلال') || name.includes('تجديد') || folder.includes('صيانة') || folder.includes('مسلم')
+  const classifyProjectPhase = (props) => {
+    if (!props) return 'unknown'
+    const status = (props.status || '').toLowerCase()
+    const phase = (props.phase || '').toLowerCase()
+    const type = (props.type || '').toLowerCase()
+    const name = (props.name || props.projectName || '').toLowerCase()
+    const folder = (props.folder || '').toLowerCase()
+
+    if (status.includes('مسلم') || status.includes('صيانة') || status.includes('maintenance') || status.includes('handover') ||
+        phase === 'maintenance' || phase === 'handover' || type === 'maintenance' || folder.includes('صيانة') || folder.includes('مسلم') ||
+        name.includes('صيانة') || name.includes('إحلال') || name.includes('تجديد') || name.includes('تشغيل')) {
+      return 'maintenance'
+    }
+
+    if (status.includes('جاري') || status.includes('ongoing') || type === 'capital' || phase === 'ongoing' ||
+        name.includes('تنفيذ') || name.includes('إنشاء') || name.includes('عقد استكمال') || name.includes('مشروع')) {
+      return 'capital'
+    }
+
+    return 'capital'
   }
 
   // Filter polygon/linestring features based on tab and search
   const filteredFeatures = useMemo(() => {
     if (!rawData) return []
 
-    let list = []
-    if (activeTab === 'capital-water') {
-      list = (rawData.waterFeatures || []).filter(f => !isMaintenanceFeature(f))
-    } else if (activeTab === 'maintenance-water') {
-      list = (rawData.waterFeatures || []).filter(f => isMaintenanceFeature(f))
-    } else if (activeTab === 'capital-sanitation') {
-      list = (rawData.sanitationFeatures || []).filter(f => !isMaintenanceFeature(f))
-    } else if (activeTab === 'maintenance-sanitation') {
-      list = (rawData.sanitationFeatures || []).filter(f => isMaintenanceFeature(f))
-    } else if (activeTab === 'water') {
-      list = rawData.waterFeatures || []
-    } else if (activeTab === 'sanitation') {
-      list = rawData.sanitationFeatures || []
-    } else if (activeTab === 'governorates') {
+    let list = rawData.features || []
+
+    if (activeTab === 'governorates') {
       list = rawData.governoratesFeatures || []
-    } else {
-      list = rawData.features || []
+    } else if (activeTab !== 'all') {
+      const [phase, sector] = activeTab.split('-')
+      list = (rawData.features || []).filter(f => {
+        const featurePhase = classifyProjectPhase(f.properties)
+        const isWater = (f.properties?.sector || f.properties?.folder || f.properties?.name || '').includes('مياه')
+        const featureSector = isWater ? 'water' : 'sanitation'
+        return featurePhase === phase && featureSector === sector
+      })
     }
 
     if (!searchQuery.trim()) return list
@@ -339,10 +349,10 @@ export default function MapView() {
     )
   }
 
-  const capitalWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => !isMaintenanceFeature(f)).length, [rawData])
-  const maintenanceWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => isMaintenanceFeature(f)).length, [rawData])
-  const capitalSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => !isMaintenanceFeature(f)).length, [rawData])
-  const maintenanceSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => isMaintenanceFeature(f)).length, [rawData])
+  const capitalWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
+  const maintenanceWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'maintenance').length, [rawData])
+  const capitalSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
+  const maintenanceSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'maintenance').length, [rawData])
 
   const waterCount = rawData?.stats?.water ?? (rawData?.waterFeatures?.length || 0)
   const sanitationCount = rawData?.stats?.sanitation ?? (rawData?.sanitationFeatures?.length || 0)
