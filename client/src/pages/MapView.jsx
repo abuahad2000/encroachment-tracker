@@ -318,25 +318,37 @@ export default function MapView() {
       }
     }
 
-    const isWater = feature.properties?.sector === 'water' || (feature.properties?.folder && feature.properties?.folder.includes('مياه'))
+    const phase = classifyProjectPhase(feature.properties)
+    const isWater = (feature.properties?.sector || feature.properties?.folder || feature.properties?.name || '').includes('مياه')
 
-    if (isWater) {
+    if (phase === 'capital') {
+      // مشاريع رأسمالية: ألوان زاهية وواضحة
       return {
-        color: '#0284c7', // Sky blue stroke
+        color: isWater ? '#0284c7' : '#059669', // أزرق للمياه، أخضر للصرف
         weight: 3,
         opacity: 0.9,
-        fillOpacity: 0.28,
-        fillColor: '#38bdf8'
+        fillOpacity: 0.3,
+        fillColor: isWater ? '#38bdf8' : '#10b981'
+      }
+    } else if (phase === 'maintenance') {
+      // مشاريع صيانة وتسليم: ألوان هادئة بخطوط متقطعة
+      return {
+        color: isWater ? '#94a3b8' : '#6b7280',
+        weight: 2,
+        opacity: 0.7,
+        dashArray: '5, 5',
+        fillOpacity: 0.18,
+        fillColor: isWater ? '#cbd5e1' : '#9ca3af'
       }
     }
 
-    // Sanitation: Emerald/Green
+    // غير مصنف
     return {
-      color: '#059669', // Emerald green stroke
-      weight: 2.5,
-      opacity: 0.85,
-      fillOpacity: 0.22,
-      fillColor: '#10b981'
+      color: '#ef4444',
+      weight: 2,
+      opacity: 0.5,
+      fillOpacity: 0.12,
+      fillColor: '#fca5a5'
     }
   }
 
