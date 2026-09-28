@@ -80,7 +80,15 @@ export default function FileUpload({ onSuccess }) {
 
   return (
     <div className="card">
-      <h3 className="text-lg font-bold mb-4">📤 رفع ملف البلاغات الجديد</h3>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-lg font-bold">📤 رفع ملف البلاغات الجديد</h3>
+        <span 
+          className="text-sm font-semibold px-3 py-1 rounded-full bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 shadow-sm"
+          style={{ color: '#0284c7' }}
+        >
+          {ExcelImportPipeline.getImportStatus()}
+        </span>
+      </div>
 
       <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-500 transition cursor-pointer bg-gray-50 dark:bg-slate-800/50">
         <label className="cursor-pointer block">
@@ -138,6 +146,9 @@ export default function FileUpload({ onSuccess }) {
       <div className="mt-4 flex items-center justify-between gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-blue-700 dark:text-blue-200 text-xs">
         <div>
           <strong>💡 ملاحظة:</strong> يمر الاستيراد بـ 6 مراحل ذكية (تنظيف، تصنيف، توحيد، ربط، استبعاد مع حماية العرين، وتحديث البيانات).
+          <div className="mt-1 font-mono text-[11px] opacity-80" style={{ color: '#0284c7' }}>
+            {ExcelImportPipeline.getLastImportSummary()}
+          </div>
         </div>
         <button
           type="button"
