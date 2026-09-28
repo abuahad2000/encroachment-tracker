@@ -446,15 +446,6 @@ export default function MapView() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
-        <p className="text-gray-600 dark:text-gray-300 font-medium">جاري تحميل الخريطة وطبقات المشاريع والبلاغات...</p>
-      </div>
-    )
-  }
-
   const capitalWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
   const maintenanceWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'maintenance').length, [rawData])
   const capitalSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
@@ -464,6 +455,15 @@ export default function MapView() {
   const sanitationCount = rawData?.stats?.sanitation ?? (rawData?.sanitationFeatures?.length || 0)
   const governoratesCount = rawData?.stats?.governorates ?? (rawData?.governoratesFeatures?.length || 0)
   const totalCount = rawData?.stats?.total ?? (rawData?.features?.length || 0)
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-300 font-medium">جاري تحميل الخريطة وطبقات المشاريع والبلاغات...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
