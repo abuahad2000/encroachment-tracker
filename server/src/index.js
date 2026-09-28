@@ -138,6 +138,9 @@ app.get('/api/reports', (req, res) => {
   if (!reports) {
     return res.status(500).json({ error: 'Reports not found.' })
   }
+  if (req.query.excluded === 'true') {
+    return res.json(reports.filter(r => r.excluded === true))
+  }
   res.json(reports)
 })
 
@@ -150,13 +153,51 @@ app.get('/api/projects', (req, res) => {
   res.json(projects)
 })
 
+// Get excluded projects / reports (Appsmith API endpoint: getExcludedProjects)
+app.get(['/api/projects/excluded', '/api/reports/excluded'], (req, res) => {
+  const reports = loadGeneratedData('reports.json')
+  if (!reports) {
+    return res.status(500).json({ error: 'Data not found.' })
+  }
+
+  const excluded = reports
+    .filter(r => r.excluded === true)
+    .map(r => ({
+      id: r.id,
+      name: r.project?.name || r.description || `بلاغ تعدي #${r.id}`,
+      contractor: r.customContractor || r.contractorName || r.project?.contractor || 'غير محدد',
+      programManager: r.project?.programManager || 'غير محدد',
+      latitude: r.latitude,
+      longitude: r.longitude,
+      district: r.district || 'غير محدد',
+      city: r.city || 'مدينة الرياض',
+      excluded: true,
+      excludedReason: r.excludedReason || r.reason || 'مستبعد'
+    }))
+
+  res.json(excluded)
+})
+
 // Get managers
 app.get('/api/managers', (req, res) => {
   const managers = loadGeneratedData('managers.json')
   if (!managers) {
     return res.status(500).json({ error: 'Managers not found.' })
   }
+  if (req.query.format === 'names') {
+    return res.json(Array.from(new Set(managers.map(m => m.name).filter(Boolean))))
+  }
   res.json(managers)
+})
+
+// Get program managers list as array of strings (Appsmith: getProgramManagers)
+app.get(['/api/program-managers', '/api/managers/names'], (req, res) => {
+  const managers = loadGeneratedData('managers.json')
+  if (!managers) {
+    return res.status(500).json({ error: 'Managers not found.' })
+  }
+  const managerNames = Array.from(new Set(managers.map(m => m.name).filter(Boolean)))
+  res.json(managerNames)
 })
 
 // Get layers (GeoJSON) - Only ongoing active layers & Governorates
@@ -465,6 +506,134 @@ app.post('/api/override', async (req, res) => {
   runExecutiveExcelExport().catch(e => console.warn('Background Excel export warning:', e.message))
 
   res.json({ success: true, overrides, updatedReportId: reportId, updatedReport })
+})
+
+// Assign report to program manager (Appsmith: AssignReportQuery)
+app.post('/api/reports/assign', async (req, res) => {
+  const { reportId, targetManagerId, assignedBy, timestamp } = req.body
+  if (!reportId || !targetManagerId) {
+    return res.status(400).json({ error: 'الحقول reportId و targetManagerId مطلوبة.' })
+  }
+
+  const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
+  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+  const managersPath = path.join(__dirname, '../data/generated/managers.json')
+  const overridesPath = path.join(__dirname, '../data/overrides.json')
+  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+
+  let allProjects = []
+  let allManagers = []
+  let reports = []
+
+  if (fs.existsSync(projectsPath)) {
+    try { allProjects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8')) } catch (e) {}
+  }
+  if (fs.existsSync(managersPath)) {
+    try { allManagers = JSON.parse(fs.readFileSync(managersPath, 'utf-8')) } catch (e) {}
+  }
+  if (fs.existsSync(reportsPath)) {
+    try { reports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8')) } catch (e) {}
+  }
+
+  // 1. Find target manager by ID, slug, or Name
+  const targetIdStr = String(targetManagerId).trim()
+  let targetManager = allManagers.find(m => 
+    String(m.id).trim() === targetIdStr || 
+    String(m.slug).trim() === targetIdStr || 
+    m.name === targetIdStr ||
+    m.name?.includes(targetIdStr) ||
+    targetIdStr.includes(m.name)
+  )
+
+  const managerName = targetManager ? targetManager.name : targetIdStr
+
+  // 2. Find report by normalized ID
+  const rIdx = reports.findIndex(r => normalizeId(r.id) === normalizeId(reportId))
+  if (rIdx < 0) {
+    return res.status(404).json({ error: `البلاغ رقم ${reportId} غير موجود` })
+  }
+
+  const report = reports[rIdx]
+  const managerProjects = allProjects.filter(p => p.programManager === managerName)
+  
+  // Match project under this manager by district or contractor
+  let assignedProject = managerProjects.find(p => 
+    (report.district && p.scope && p.scope.includes(report.district)) ||
+    (report.contractorName && p.contractor && p.contractor.includes(report.contractorName))
+  ) || managerProjects[0] || report.project || {
+    id: `custom-${normalizeId(reportId)}`,
+    name: `مشروع تابع لـ ${managerName}`,
+    programManager: managerName,
+    contractor: report.contractorName || 'غير محدد',
+    status: 'جاري'
+  }
+
+  // 3. Update report state: unexclude & assign
+  report.excluded = false
+  report.excludedReason = null
+  report.matched = true
+  report.isLocked = true
+  report.project = {
+    ...assignedProject,
+    programManager: managerName
+  }
+  if (report.status === 'تحت معالجة المقاول') {
+    report.actionCategory = 'تحت معالجة المقاول'
+  } else if (report.status === 'تمت المعالجة') {
+    report.actionCategory = 'تمت المعالجة'
+  } else {
+    report.actionCategory = 'تحت الإجراء'
+  }
+
+  reports[rIdx] = report
+  safeWriteJsonSync(reportsPath, reports)
+
+  // 4. Save override for permanent persistence
+  try {
+    let overrides = []
+    if (fs.existsSync(overridesPath)) {
+      try { overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8')) || [] } catch (e) {}
+    }
+    const oIdx = overrides.findIndex(o => normalizeId(o.reportId) === normalizeId(reportId))
+    const overrideEntry = {
+      reportId: normalizeId(reportId),
+      excluded: false,
+      isLocked: true,
+      customProgramManager: managerName,
+      projectId: assignedProject.id,
+      assignedBy: assignedBy || 'appsmith',
+      timestamp: timestamp || new Date().toISOString()
+    }
+    if (oIdx >= 0) {
+      overrides[oIdx] = { ...overrides[oIdx], ...overrideEntry }
+    } else {
+      overrides.push(overrideEntry)
+    }
+    safeWriteJsonSync(overridesPath, overrides)
+    safeWriteJsonSync(overridesBackupPath, overrides)
+  } catch (e) {
+    console.warn('Error saving assignment override:', e.message)
+  }
+
+  // 5. Recompute stats and managers
+  try {
+    const updatedStats = calculateStats(reports, allProjects)
+    const updatedManagers = createManagersData(allProjects, reports)
+    safeWriteJsonSync(path.join(__dirname, '../data/generated/stats.json'), updatedStats)
+    safeWriteJsonSync(path.join(__dirname, '../data/generated/managers.json'), updatedManagers)
+  } catch (e) {}
+
+  // 6. Regenerate executive Excel in background
+  runExecutiveExcelExport().catch(() => {})
+
+  res.json({
+    success: true,
+    message: `تم إسناد البلاغ رقم ${reportId} بنجاح إلى مدير البرنامج: ${managerName}`,
+    reportId: report.id,
+    targetManager: managerName,
+    project: report.project
+  })
 })
 
 // Refresh data
@@ -1041,12 +1210,19 @@ app.get('/api/export/contractor-directory-excel', (req, res) => {
 
 // Export executive pending reports Excel
 app.get('/api/export/pending-excel', (req, res) => {
-  const filePath = path.join(__dirname, '../../XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
-  if (fs.existsSync(filePath)) {
-    res.download(path.resolve(filePath), 'تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
-  } else {
-    res.status(404).json({ error: 'ملف الإكسيل غير موجود' })
-  }
+  const scriptPath = path.join(__dirname, '../../scripts/export_executive_excel.py')
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+  exec(`"${pythonCmd}" "${scriptPath}"`, (error) => {
+    if (error) {
+      console.warn('Warning generating executive excel:', error.message)
+    }
+    const filePath = path.join(__dirname, '../../XLSX/تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+    if (fs.existsSync(filePath)) {
+      res.download(path.resolve(filePath), 'تقرير_البلاغات_المعلقة_التنفيذي_الشامل_NWC.xlsx')
+    } else {
+      res.status(404).json({ error: 'ملف الإكسيل غير موجود' })
+    }
+  })
 })
 
 // Health check

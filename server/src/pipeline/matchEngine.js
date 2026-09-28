@@ -117,14 +117,37 @@ export function isCivilWorksContractor(contractorName) {
   return norm.includes('اعمال مدنيه') || norm.includes('الاعمال المدنيه')
 }
 
+export function cleanContractorName(name) {
+  if (!name) return ''
+  let norm = normalizeArabic(name).toLowerCase()
+  const wordsToRemove = [
+    'شركه شخص واحد', 'شخص واحد', 'شركه', 'شركة', 'مؤسسه', 'مؤسسة',
+    'مجموعه', 'مجموعة', 'للمقاولات', 'المقاولات', 'المحدوده', 'المحدودة',
+    'مساهمه مقفله', 'مساهمة مقفلة', 'مساهمه', 'مساهمة', 'مقفله', 'مقفلة',
+    'للتجاره', 'للتجارة', 'والصناعه', 'والصناعة', 'العالميه', 'العالمية', 'المتحده', 'المتحدة'
+  ]
+  for (const w of wordsToRemove) {
+    norm = norm.replaceAll(w, ' ')
+  }
+  return norm.replace(/\s+/g, ' ').trim()
+}
+
 function matchContractor(reportContractor, projectContractors) {
   if (!reportContractor || reportContractor.toUpperCase() === 'NULL') return false
   const normalized = normalizeArabic(reportContractor).toLowerCase()
+  const cleanRep = cleanContractorName(reportContractor)
 
   for (const projectContractor of projectContractors) {
     if (!projectContractor) continue
     const projNorm = normalizeArabic(projectContractor).toLowerCase()
-    if (normalized.includes(projNorm) || projNorm.includes(normalized) || similarity(normalized, projNorm) >= SIMILARITY_THRESHOLD) {
+    const cleanProj = cleanContractorName(projectContractor)
+
+    if (
+      normalized.includes(projNorm) || projNorm.includes(normalized) ||
+      (cleanRep && cleanProj && (cleanRep.includes(cleanProj) || cleanProj.includes(cleanRep))) ||
+      similarity(normalized, projNorm) >= SIMILARITY_THRESHOLD ||
+      (cleanRep && cleanProj && similarity(cleanRep, cleanProj) >= SIMILARITY_THRESHOLD)
+    ) {
       return true
     }
   }
@@ -501,20 +524,23 @@ export function getProjectSector(project) {
 
 export function classifyReportSectorFromText(report) {
   const fullText = ((report.description || '') + ' ' + (report.impact || '') + ' ' + (report.centerComment || '')).toLowerCase()
-  // تنظيف اسم الشركة المتكرر لتفادي تزييف نتيجة المياه
-  const cleanText = fullText.replace(/شركة المياه الوطنية/g, '').replace(/شركه المياه الوطنيه/g, '')
+  // تنظيف اسم الشركة المتكرر بأشكاله لتفادي تزييف نتيجة المياه
+  const cleanText = fullText
+    .replace(/شرك[ةه]\s+المياه(\s+الوطني[ةه])?/gi, '')
+    .replace(/شركة المياه/gi, '')
+    .replace(/شركه المياه/gi, '')
 
   const hasSewer = /صرف|صحي|مجاري|مجرور|محطة معالجة|بيارة|بياره|خط طرد|غرفة تفتيش|منهل|مناهل/.test(cleanText)
-  const hasWater = /مياه|شبكة مياه|شبكه مياه|عداد|تسريب|انكسار|انبوب|توصيلة|توصيله|بئر|محبس|خزان/.test(cleanText)
+  const hasWater = /شبك[ةه]\s+مياه|خطوط\s+مياه|انبوب\s+مياه|أنبوب\s+مياه|ماسورة\s+مياه|عداد\s+مياه|تسريب\s+مياه|انكسار\s+مياه|انكسار\s+خط|توصيل[ةه]\s+مياه|شبكة\s+المياه|خط\s+مياه/.test(cleanText)
 
   if (hasSewer && !hasWater) return 'صرف'
   if (hasWater && !hasSewer) return 'مياه'
   if (hasSewer && hasWater) {
     const sewerIdx = cleanText.search(/صرف|صحي/)
-    const waterIdx = cleanText.search(/مياه|عداد/)
+    const waterIdx = cleanText.search(/شبك[ةه]\s+مياه|خطوط\s+مياه|انبوب|أنبوب|ماسورة|عداد|تسريب|انكسار/)
     return sewerIdx < waterIdx ? 'صرف' : 'مياه'
   }
-  return 'مياه'
+  return 'عام'
 }
 
 export function processReports(reports, projects, geoJsonData, overrides, contractorsConfig) {
@@ -585,7 +611,8 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       if (override.customSector) {
         result.sector = override.customSector
       } else {
-        result.sector = classifyReportSectorFromText(report)
+        const cls = classifyReportSectorFromText(report)
+        result.sector = cls === 'عام' ? 'صرف' : cls
       }
       const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
       const today = new Date('2026-09-18')
@@ -716,7 +743,8 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     } else if (result.project) {
       result.sector = getProjectSector(result.project)
     } else {
-      result.sector = classifyReportSectorFromText(report)
+      const cls = classifyReportSectorFromText(report)
+      result.sector = cls === 'عام' ? 'صرف' : cls
     }
 
     if (report.status === 'تمت المعالجة') {
