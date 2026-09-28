@@ -7,6 +7,7 @@ import { exec } from 'child_process'
 import multer from 'multer'
 import { buildData, calculateStats, createManagersData, normalizeManagerName } from './pipeline/buildData.js'
 import mappingRouter from './routes/mapping.js'
+import importRouter from './routes/import.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -66,6 +67,8 @@ app.use(cors({
 }))
 app.use(express.json())
 app.use('/api', mappingRouter)
+app.use('/api', importRouter)
+app.use('/api/import', importRouter)
 
 // Serve static files from dist/ (built React app)
 const distPath = path.join(__dirname, '../../dist')
