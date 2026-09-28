@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { ExcelImportPipeline } from '../utils/ExcelImportPipeline'
 
 export default function FileUpload({ onSuccess }) {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [stageMsg, setStageMsg] = useState('')
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [rollingBack, setRollingBack] = useState(false)
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0]
@@ -25,57 +28,53 @@ export default function FileUpload({ onSuccess }) {
     setError(null)
     setSuccess(null)
     setUploading(true)
-    setProgress(0)
+    setProgress(15)
+    setStageMsg('المرحلة 1/6: جاري تنظيف وتدقيق البيانات...')
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
+      const result = await ExcelImportPipeline.processUploadedFile(file)
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 90) return prev + Math.random() * 30
-          clearInterval(progressInterval)
-          return prev
-        })
-      }, 500)
+      if (result && result.success) {
+        setProgress(100)
+        setStageMsg('اكتملت جميع المراحل بنجاح!')
+        const audit = result.audit || {}
+        setSuccess(
+          `✅ تم الاستيراد بنجاح!\n` +
+          `📊 إجمالي البلاغات المعالجة: ${audit.processed || 0}\n` +
+          `🎯 مرتبط بدقة: ${audit.matched || 0} | ⚠️ يحتاج مراجعة: ${audit.unmatched || 0}\n` +
+          `📈 نسبة الدقة: ${audit.accuracy || '100'}%`
+        )
 
-      const response = await fetch('/api/upload-reports', {
-        method: 'POST',
-        body: formData
-      })
+        // Reset file input
+        e.target.value = ''
 
-      clearInterval(progressInterval)
-      setProgress(100)
-
-      if (!response.ok) {
-        let errText = 'خطأ في رفع الملف'
-        try {
-          const data = await response.json()
-          errText = data.details ? `${data.error}: ${data.details}` : (data.error || errText)
-        } catch {
-          errText = `خطأ في الخادم (${response.status})`
-        }
-        throw new Error(errText)
+        setTimeout(() => {
+          setUploading(false)
+          setProgress(0)
+          setStageMsg('')
+          onSuccess?.()
+        }, 2000)
+      } else {
+        throw new Error(result?.error || 'فشلت معالجة ملف الإكسل')
       }
-
-      const data = await response.json()
-      setSuccess(`✅ تم رفع الملف بنجاح! تم معالجة البيانات تلقائياً.`)
-
-      // Reset form
-      e.target.value = ''
-
-      // Call callback after 2 seconds
-      setTimeout(() => {
-        setUploading(false)
-        setProgress(0)
-        onSuccess?.()
-      }, 2000)
-
     } catch (err) {
       setError(`❌ خطأ: ${err.message}`)
       setUploading(false)
       setProgress(0)
+      setStageMsg('')
+    }
+  }
+
+  const handleRollback = async () => {
+    setRollingBack(true)
+    try {
+      const res = await ExcelImportPipeline.rollbackLastImport()
+      if (res && res.success) {
+        setSuccess('✅ تم التراجع عن آخر استيراد واستعادة النسخة الاحتياطية بنجاح.')
+        onSuccess?.()
+      }
+    } finally {
+      setRollingBack(false)
     }
   }
 
@@ -108,7 +107,9 @@ export default function FileUpload({ onSuccess }) {
       {uploading && (
         <div className="mt-4">
           <div className="flex justify-between mb-2">
-            <span className="text-sm font-medium">جاري المعالجة...</span>
+            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+              {stageMsg || 'جاري المعالجة...'}
+            </span>
             <span className="text-sm font-medium">{Math.round(progress)}%</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -122,20 +123,31 @@ export default function FileUpload({ onSuccess }) {
 
       {/* Error Message */}
       {error && (
-        <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-200 text-sm">
+        <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-200 text-sm whitespace-pre-line">
           {error}
         </div>
       )}
 
       {/* Success Message */}
       {success && (
-        <div className="mt-4 p-3 bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg text-green-700 dark:text-green-200 text-sm">
+        <div className="mt-4 p-3 bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg text-green-700 dark:text-green-200 text-sm whitespace-pre-line">
           {success}
         </div>
       )}
 
-      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-blue-700 dark:text-blue-200 text-xs">
-        <strong>💡 ملاحظة:</strong> سيتم معالجة البلاغات تلقائياً وربطها بالمشاريع، وسيتم تحديث جميع البيانات والخرائط فوراً.
+      <div className="mt-4 flex items-center justify-between gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg text-blue-700 dark:text-blue-200 text-xs">
+        <div>
+          <strong>💡 ملاحظة:</strong> يمر الاستيراد بـ 6 مراحل ذكية (تنظيف، تصنيف، توحيد، ربط، استبعاد مع حماية العرين، وتحديث البيانات).
+        </div>
+        <button
+          type="button"
+          onClick={handleRollback}
+          disabled={rollingBack || uploading}
+          className="shrink-0 px-2.5 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded transition disabled:opacity-50"
+          title="التراجع عن آخر استيراد واستعادة النسخة السابقة"
+        >
+          {rollingBack ? 'جاري التراجع...' : '↺ تراجع عن آخر استيراد'}
+        </button>
       </div>
     </div>
   )
