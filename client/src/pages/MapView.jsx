@@ -572,7 +572,7 @@ export default function MapView() {
                     </div>
 
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>
-                      <strong style={{ color: '#1e293b' }}>مدير البرنامج:</strong> <span style={{ color: '#0284c7', fontWeight: 'bold' }}>{r.project?.programManager || '-'}</span>
+                      <strong style={{ color: '#1e293b' }}>مدير البرنامج:</strong> <span style={{ color: '#0284c7', fontWeight: 'bold' }}>{r.programManager || r.project?.programManager || '-'}</span>
                     </div>
 
                     {r.project?.projectManager && r.project.projectManager !== '-' && (
