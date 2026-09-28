@@ -202,12 +202,27 @@ export default function MapView() {
     })
   }, [pendingReports, contractorPendingReports, inProgressReports, pinStatusFilter, showReportPins, activeTab, selectedManager, searchQuery])
 
+  const isMaintenanceFeature = (f) => {
+    const name = (f?.properties?.name || f?.properties?.projectName || '').toLowerCase()
+    const status = (f?.properties?.status || '').toLowerCase()
+    const folder = (f?.properties?.folder || '').toLowerCase()
+    return status.includes('مسلم') || status.includes('صيانة') || name.includes('صيانة') || name.includes('إحلال') || name.includes('تجديد') || folder.includes('صيانة') || folder.includes('مسلم')
+  }
+
   // Filter polygon/linestring features based on tab and search
   const filteredFeatures = useMemo(() => {
     if (!rawData) return []
 
     let list = []
-    if (activeTab === 'water') {
+    if (activeTab === 'capital-water') {
+      list = (rawData.waterFeatures || []).filter(f => !isMaintenanceFeature(f))
+    } else if (activeTab === 'maintenance-water') {
+      list = (rawData.waterFeatures || []).filter(f => isMaintenanceFeature(f))
+    } else if (activeTab === 'capital-sanitation') {
+      list = (rawData.sanitationFeatures || []).filter(f => !isMaintenanceFeature(f))
+    } else if (activeTab === 'maintenance-sanitation') {
+      list = (rawData.sanitationFeatures || []).filter(f => isMaintenanceFeature(f))
+    } else if (activeTab === 'water') {
       list = rawData.waterFeatures || []
     } else if (activeTab === 'sanitation') {
       list = rawData.sanitationFeatures || []
@@ -324,6 +339,11 @@ export default function MapView() {
     )
   }
 
+  const capitalWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => !isMaintenanceFeature(f)).length, [rawData])
+  const maintenanceWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => isMaintenanceFeature(f)).length, [rawData])
+  const capitalSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => !isMaintenanceFeature(f)).length, [rawData])
+  const maintenanceSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => isMaintenanceFeature(f)).length, [rawData])
+
   const waterCount = rawData?.stats?.water ?? (rawData?.waterFeatures?.length || 0)
   const sanitationCount = rawData?.stats?.sanitation ?? (rawData?.sanitationFeatures?.length || 0)
   const governoratesCount = rawData?.stats?.governorates ?? (rawData?.governoratesFeatures?.length || 0)
@@ -336,10 +356,10 @@ export default function MapView() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <span>🗺️</span>
-            <span>الخريطة الجغرافية الشاملة للمشاريع الجارية ونقاط البلاغات</span>
+            <span>الخريطة الجغرافية الشاملة للمشاريع ونقاط البلاغات</span>
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            عرض طبقات المشاريع الجارية المعتمدة بـ KMZ مع نقاط بلاغات التعدي المعلقة المسندة لمدراء البرامج
+            فصل المشاريع الرأسمالية الجارية عن مشاريع الصيانة والتسليم الابتدائي مع نقاط بلاغات التعدي
           </p>
         </div>
 
@@ -367,53 +387,81 @@ export default function MapView() {
 
       {/* Layer Tabs & Controls Bar */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-2 bg-gray-100 dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700">
-        {/* Sector Tabs */}
+        {/* Separated Layer Tabs */}
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
               activeTab === 'all'
                 ? 'bg-white dark:bg-gray-700 text-primary-700 dark:text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
           >
-            <span>🗺️ كافة المشاريع الجارية</span>
+            <span>🗺️ الكل</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'all' ? 'bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200' : 'bg-gray-200 dark:bg-gray-600'}`}>
               {totalCount}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('water')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'water'
+            onClick={() => setActiveTab('capital-water')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'capital-water'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
           >
-            <span>💧 مشاريع المياه</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'water' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'}`}>
-              {waterCount}
+            <span>💧 مياه - رأسمالي</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'capital-water' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'}`}>
+              {capitalWaterCount}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('sanitation')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'sanitation'
+            onClick={() => setActiveTab('maintenance-water')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'maintenance-water'
+                ? 'bg-slate-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            }`}
+          >
+            <span>🛠️ مياه - صيانة</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'maintenance-water' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-800 dark:bg-slate-900 dark:text-slate-200'}`}>
+              {maintenanceWaterCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('capital-sanitation')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'capital-sanitation'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
             }`}
           >
-            <span>🚰 مشاريع الصرف</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'sanitation' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
-              {sanitationCount}
+            <span>🚰 صرف - رأسمالي</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'capital-sanitation' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
+              {capitalSanitationCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('maintenance-sanitation')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'maintenance-sanitation'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            }`}
+          >
+            <span>🔧 صرف - صيانة</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'maintenance-sanitation' ? 'bg-purple-800 text-white' : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-200'}`}>
+              {maintenanceSanitationCount}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('governorates')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
               activeTab === 'governorates'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
