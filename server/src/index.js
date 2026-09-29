@@ -258,7 +258,7 @@ app.get('/api/layers', (req, res) => {
   })
 })
 
-// Upload new reports file
+// Upload new reports file (مع ميزة التصفير التام قبل المعالجة)
 app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -270,7 +270,33 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
     const uploadsDir = path.join(__dirname, '../../uploads')
     const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
-    // 1. حذف الملف المحفوظ سابقاً لضمان عدم بقاء أي نسخة قديمة
+    // ==========================================
+    // الخطوة 1: تصفير النتائج والبيانات القديمة تماماً
+    // ==========================================
+    console.log('🧹 جاري تصفير البيانات القديمة لضمان بداية نظيفة...')
+    const generatedDir = path.join(__dirname, '../data/generated')
+    const overridesPath = path.join(__dirname, '../data/overrides.json')
+    const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+
+    // تفريغ ملفات JSON من البيانات القديمة (نتركها كـ مصفوفة فارغة [] لتجنب أخطاء القراءة)
+    if (fs.existsSync(generatedDir)) {
+      fs.writeFileSync(path.join(generatedDir, 'reports.json'), '[]', 'utf-8')
+      fs.writeFileSync(path.join(generatedDir, 'stats.json'), '{}', 'utf-8')
+      fs.writeFileSync(path.join(generatedDir, 'managers.json'), '[]', 'utf-8')
+      console.log('✅ تم تصفير: reports.json, stats.json, managers.json')
+    }
+
+    if (fs.existsSync(overridesPath)) {
+      fs.writeFileSync(overridesPath, '[]', 'utf-8')
+      console.log('✅ تم تصفير: overrides.json (سيتم إعادة بنائها من الملف الجديد)')
+    }
+    if (fs.existsSync(overridesBackupPath)) {
+      fs.writeFileSync(overridesBackupPath, '[]', 'utf-8')
+    }
+
+    // ==========================================
+    // الخطوة 2: استبدال ملف الإكسيل القديم بالجديد
+    // ==========================================
     if (fs.existsSync(uploadedReportsCopy)) {
       try {
         fs.unlinkSync(uploadedReportsCopy)
@@ -293,7 +319,7 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
       } catch (e) {}
     }
 
-    // 2. اعتماد الملف الجديد مباشرة كملف فعال
+    // اعتماد الملف الجديد مباشرة كملف فعال
     if (!fs.existsSync(xlsxDir)) {
       fs.mkdirSync(xlsxDir, { recursive: true })
     }
@@ -302,16 +328,20 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
       fs.unlinkSync(uploadedPath) // حذف الملف المؤقت
     } catch (e) {}
 
-    // 3. معالجة الملف الجديد مباشرة وتحديث السجلات
-    console.log(`📤 جاري معالجة ملف الإكسيل الجديد مباشرة: ${uploadedReportsCopy}`)
+    // ==========================================
+    // الخطوة 3: تطبيق الآلية (Pipeline) على الملف الجديد من الصفر
+    // ==========================================
+    console.log(`📤 جاري تطبيق آلية المعالجة والربط على الملف الجديد: ${uploadedReportsCopy}`)
     const result = await buildData(uploadedReportsCopy)
 
-    // 4. إعادة توليد التقرير التنفيذي فوراً بالبيانات الجديدة
+    // ==========================================
+    // الخطوة 4: إعادة توليد التقرير التنفيذي
+    // ==========================================
     await runExecutiveExcelExport()
 
     res.json({
       success: true,
-      message: 'تم استلام الملف الجديد وحذف الملف المحفوظ السابق وإعادة معالجة كافة البيانات بنجاح',
+      message: 'تم تصفير البيانات القديمة، واستلام الملف الجديد، وتطبيق الآلية بنجاح من الصفر',
       file: req.file.originalname,
       stats: result?.stats,
       timestamp: new Date().toISOString()
