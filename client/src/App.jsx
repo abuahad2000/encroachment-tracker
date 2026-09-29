@@ -36,7 +36,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
             <div className="flex gap-8">
               <Link to="/" className="font-bold text-lg hover:text-blue-100">
-                📊 نظام التعديات
+                 نظام التعديات
               </Link>
               <div className="flex items-center gap-4">
                 <Link to="/" className="hover:text-blue-100 transition">لوحة رئيسية</Link>
@@ -46,6 +46,10 @@ export default function App() {
                 <Link to="/managers" className="hover:text-blue-100 transition">المدراء</Link>
                 <Link to="/contractors" className="hover:text-blue-100 transition font-bold bg-blue-700/60 hover:bg-blue-700 px-3 py-1 rounded-lg border border-blue-400/40">المقاولين</Link>
                 <Link to="/contractor-overlap-audit" className="hover:text-amber-200 transition text-xs font-bold bg-amber-500/30 hover:bg-amber-500/40 px-2.5 py-1 rounded-lg border border-amber-300/40">تدقيق التداخل ⚖️</Link>
+                {/* ✅ رابط جديد لصفحة مراجعة الربط */}
+                <Link to="/mapping-review" className="hover:text-red-200 transition text-xs font-bold bg-red-500/30 hover:bg-red-500/40 px-2.5 py-1 rounded-lg border border-red-300/40">
+                  🔍 مراجعة الربط
+                </Link>
                 <Link to="/export" className="hover:text-blue-100 transition">التصدير</Link>
               </div>
             </div>
@@ -65,6 +69,8 @@ export default function App() {
             <Route path="/managers" element={<ManagerCards />} />
             <Route path="/managers/:managerId" element={<ManagerDetail />} />
             <Route path="/export" element={<WeeklyExport />} />
+            {/* ✅ Route جديد لصفحة مراجعة الربط */}
+            <Route path="/mapping-review" element={<MappingReview />} />
           </Routes>
         </main>
 
