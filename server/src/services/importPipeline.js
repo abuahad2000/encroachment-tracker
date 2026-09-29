@@ -31,13 +31,124 @@ class ImportPipeline {
       data = this.stage3_normalize(data)
       this.completeStage()
 
-      // ===== المرحلة 4: الربط الدقيق =====
-      this.addStage('Mapping', 'جاري الربط بالمشاريع...')
-      const mappingResult = await this.stage4_map(data)
-      data = mappingResult.data
-      audit.matched = mappingResult.matched
-      audit.unmatched = mappingResult.unmatched
-      this.completeStage()
+     // ===== المرحلة 4: الربط الدقيق مع نظام الثقة =====
+async stage4_map(data) {
+  const projectsPath = path.join(__dirname, '../../data/projects.json');
+  const projects = fs.existsSync(projectsPath) 
+    ? JSON.parse(fs.readFileSync(projectsPath, 'utf8')) 
+    : [];
+
+  let matched = 0;
+  let unmatched = 0;
+  let lowConfidence = 0;
+
+  const mappedData = data.map(row => {
+    let bestMatch = null;
+    let bestScore = 0;
+    let matchReason = '';
+
+    // ===== معايير الربط المشددة =====
+    projects.forEach(project => {
+      let score = 0;
+      let reasons = [];
+
+      // المعيار 1: تطابق اسم المشروع (40 نقطة)
+      if (row.projectName && project.name) {
+        const rowName = row.projectName.toLowerCase().trim();
+        const projName = project.name.toLowerCase().trim();
+        if (rowName === projName) {
+          score += 40;
+          reasons.push('تطابق تام في اسم المشروع');
+        } else if (rowName.includes(projName) || projName.includes(rowName)) {
+          score += 25;
+          reasons.push('تطابق جزئي في اسم المشروع');
+        }
+      }
+
+      // المعيار 2: تطابق رقم العملية (30 نقطة) - الأقوى
+      if (row.operationNumber && project.operationNumber) {
+        if (row.operationNumber === project.operationNumber) {
+          score += 30;
+          reasons.push('تطابق رقم العملية');
+        }
+      }
+
+      // المعيار 3: تطابق المقاول + الحي معاً (20 نقطة)
+      if (row.contractorName && row.district && project.contractor && project.scope) {
+        const contractorMatch = row.contractorName === project.contractor;
+        const districtMatch = project.scope.includes(row.district) || 
+                              project.name.includes(row.district);
+        if (contractorMatch && districtMatch) {
+          score += 20;
+          reasons.push('تطابق المقاول والحي');
+        } else if (contractorMatch) {
+          score += 8;
+          reasons.push('تطابق المقاول فقط');
+        }
+      }
+
+      // المعيار 4: تطابق القطاع (10 نقاط)
+      if (row.sector && project.sector) {
+        if (row.sector === project.sector) {
+          score += 10;
+          reasons.push('تطابق القطاع');
+        }
+      }
+
+      // حفظ أفضل تطابق
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = project;
+        matchReason = reasons.join(' + ');
+      }
+    });
+
+    // ===== قرار الربط بناءً على الثقة =====
+    if (bestScore >= 70) {
+      // ثقة عالية - ربط تلقائي
+      matched++;
+      return {
+        ...row,
+        project: bestMatch,
+        projectId: bestMatch.id,
+        programManager: bestMatch.programManager,
+        projectManager: bestMatch.projectManager,
+        contractor: bestMatch.contractor || row.contractorName,
+        matched: true,
+        confidence: 'high',
+        confidenceScore: bestScore,
+        matchReason
+      };
+    } else if (bestScore >= 40) {
+      // ثقة متوسطة - ربط مع علامة للمراجعة
+      lowConfidence++;
+      return {
+        ...row,
+        project: bestMatch,
+        projectId: bestMatch.id,
+        programManager: bestMatch.programManager,
+        matched: true,
+        confidence: 'medium',
+        confidenceScore: bestScore,
+        matchReason,
+        needsReview: true // ⚠️ علامة للمراجعة اليدوية
+      };
+    } else {
+      // ثقة منخفضة - عدم الربط
+      unmatched++;
+      return {
+        ...row,
+        matched: false,
+        confidence: 'low',
+        confidenceScore: bestScore,
+        needsManualReview: true,
+        suggestedProject: bestMatch ? bestMatch.name : null
+      };
+    }
+  });
+
+  return { data: mappedData, matched, unmatched, lowConfidence };
+}
 
       // ===== المرحلة 5: تطبيق قواعد الاستبعاد =====
       this.addStage('Exclusion', 'جاري تطبيق قواعد الاستبعاد...')
