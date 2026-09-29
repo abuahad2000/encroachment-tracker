@@ -8,6 +8,13 @@ import multer from 'multer'
 import { buildData, calculateStats, createManagersData, normalizeManagerName } from './pipeline/buildData.js'
 import mappingRouter from './routes/mapping.js'
 import importRouter from './routes/import.js'
+import { processReports } from './pipeline/matchEngine.js'
+import { 
+  loadMaintenanceDistricts, 
+  addMaintenanceDistrict, 
+  removeMaintenanceDistrict, 
+  buildDistrictsClassification 
+} from './pipeline/districtClassification.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -18,6 +25,60 @@ function safeWriteJsonSync(filePath, data) {
   const tmpPath = `${filePath}.tmp.${Date.now()}`
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
   fs.renameSync(tmpPath, filePath)
+}
+
+// دالة مركزية لإعادة معالجة وتحديث البلاغات والإحصائيات وتصنيف الأحياء فوراً
+export function triggerFullRecalculation() {
+  try {
+    const projects = loadGeneratedData('projects.json') || []
+    const layers = loadGeneratedData('layers.json') || { water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }
+    
+    // قراءة ملف التعديلات اليدوية
+    const overridesPath = path.join(__dirname, '../data/overrides.json')
+    let overrides = []
+    if (fs.existsSync(overridesPath)) {
+      try { overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8')) } catch (e) {}
+    }
+
+    // قراءة مقاولي الدليل
+    const dirPath = path.join(__dirname, '../data/contractor_directory.json')
+    let contractorsConfig = null
+    if (fs.existsSync(dirPath)) {
+      try { contractorsConfig = JSON.parse(fs.readFileSync(dirPath, 'utf-8')) } catch (e) {}
+    }
+
+    // قراءة البلاغات الموجودة
+    const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+    const directReportsPath = path.join(__dirname, '../data/reports.json')
+    let rawReports = []
+    if (fs.existsSync(reportsPath)) {
+      try { rawReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8')) } catch (e) {}
+    } else if (fs.existsSync(directReportsPath)) {
+      try { rawReports = JSON.parse(fs.readFileSync(directReportsPath, 'utf-8')) } catch (e) {}
+    }
+
+    const classification = buildDistrictsClassification(projects)
+    safeWriteJsonSync(path.join(__dirname, '../data/generated/districts_classification.json'), classification)
+
+    if (rawReports && rawReports.length > 0) {
+      const processedReports = processReports(rawReports, projects, layers, overrides, contractorsConfig)
+      const stats = calculateStats(processedReports, projects)
+      const managers = createManagersData(projects, processedReports)
+
+      safeWriteJsonSync(path.join(__dirname, '../data/generated/reports.json'), processedReports)
+      safeWriteJsonSync(directReportsPath, processedReports)
+      safeWriteJsonSync(path.join(__dirname, '../data/generated/stats.json'), stats)
+      safeWriteJsonSync(path.join(__dirname, '../data/generated/managers.json'), managers)
+
+      console.log(`✅ تم إعادة معالجة وتحديث ${processedReports.length} بلاغاً وإحصائياتها وتصنيف الأحياء بنجاح.`)
+      return { success: true, count: processedReports.length }
+    }
+
+    return { success: true, count: 0 }
+  } catch (err) {
+    console.error('Error in triggerFullRecalculation:', err)
+    return { success: false, error: err.message }
+  }
 }
 
 // Configure multer for file uploads
@@ -197,6 +258,65 @@ app.get(['/api/projects/by-district', '/api/districts-classification'], async (r
   }
 
   res.json(filtered)
+})
+
+// أحياء الصيانة المستبعدة مباشرة من المشاريع دون الحاجة لربطها بمشروع
+app.get('/api/districts/maintenance', (req, res) => {
+  try {
+    const list = loadMaintenanceDistricts()
+    res.json(list)
+  } catch (err) {
+    res.status(500).json({ error: 'فشل في تحميل قائمة أحياء الصيانة' })
+  }
+})
+
+// إضافة حي صيانة جديد (يستبعد بلاغاته مباشرة من المشاريع دون ربطه بمشروع رأسمالي)
+app.post('/api/districts/maintenance', (req, res) => {
+  try {
+    const { district, notes, city } = req.body
+    if (!district || !String(district).trim()) {
+      return res.status(400).json({ error: 'اسم الحي مطلوب لإضافته للصيانة' })
+    }
+
+    const result = addMaintenanceDistrict({ district, notes, city })
+    if (!result.success) {
+      return res.status(400).json({ error: result.message, list: result.list })
+    }
+
+    // إعادة معالجة وتحديث البلاغات والإحصائيات وتصنيف الأحياء فوراً
+    triggerFullRecalculation()
+
+    res.json({
+      success: true,
+      message: `تم إضافة حي "${result.entry.district}" إلى تصنيف الصيانة واستبعاد بلاغاته مباشرة من المشاريع بنجاح`,
+      entry: result.entry,
+      list: result.list
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'فشل في إضافة حي الصيانة' })
+  }
+})
+
+// حذف حي من تصنيف الصيانة
+app.delete('/api/districts/maintenance/:name', (req, res) => {
+  try {
+    const { name } = req.params
+    const result = removeMaintenanceDistrict(name)
+    if (!result.success) {
+      return res.status(404).json({ error: result.message, list: result.list })
+    }
+
+    // إعادة معالجة وتحديث البلاغات والإحصائيات فوراً
+    triggerFullRecalculation()
+
+    res.json({
+      success: true,
+      message: 'تم حذف الحي من تصنيف الصيانة وإعادة تحديث البيانات بنجاح',
+      list: result.list
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'فشل في حذف حي الصيانة' })
+  }
 })
 
 // Get excluded projects / reports (Appsmith API endpoint: getExcludedProjects)

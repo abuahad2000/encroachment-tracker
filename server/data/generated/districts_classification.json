@@ -3,6 +3,7 @@
     "district": "الأفلاج",
     "normalizedDistrict": "الافلاج",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -43,6 +44,7 @@
     "district": "البجادية",
     "normalizedDistrict": "البجاديه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -82,6 +84,7 @@
     "district": "البيان",
     "normalizedDistrict": "البيان",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "سفر العتيبي"
     ],
@@ -122,6 +125,7 @@
     "district": "الجبيلة",
     "normalizedDistrict": "الجبيله",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "عبدالله علي العنزي"
     ],
@@ -162,6 +166,7 @@
     "district": "الحائر",
     "normalizedDistrict": "الحائر",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "تركي ظافر يحيى الاسمري"
     ],
@@ -190,6 +195,7 @@
     "district": "الحريق",
     "normalizedDistrict": "الحريق",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -218,6 +224,7 @@
     "district": "الحزم",
     "normalizedDistrict": "الحزم",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "تركي ظافر يحيى الاسمري"
     ],
@@ -246,6 +253,7 @@
     "district": "الخرج",
     "normalizedDistrict": "الخرج",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "علي الشهري",
       "شاكر الحقباني"
@@ -336,6 +344,7 @@
     "district": "الدرعية",
     "normalizedDistrict": "الدرعيه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "عبدالله علي العنزي",
       "فهد العنزي",
@@ -402,6 +411,7 @@
     "district": "الدوادمي",
     "normalizedDistrict": "الدوادمي",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -479,6 +489,7 @@
     "district": "الروضة",
     "normalizedDistrict": "الروضه",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "سفر العتيبي"
     ],
@@ -507,6 +518,7 @@
     "district": "الزلفي",
     "normalizedDistrict": "الزلفي",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "علي القحطاني"
     ],
@@ -560,6 +572,7 @@
     "district": "السليل",
     "normalizedDistrict": "السليل",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -613,6 +626,7 @@
     "district": "السيح",
     "normalizedDistrict": "السيح",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -641,6 +655,7 @@
     "district": "العارض",
     "normalizedDistrict": "العارض",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -693,6 +708,7 @@
     "district": "العوالي",
     "normalizedDistrict": "العوالي",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "أمجد الفالح"
     ],
@@ -733,6 +749,7 @@
     "district": "العيينة",
     "normalizedDistrict": "العيينه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "عبدالله علي العنزي"
     ],
@@ -773,6 +790,7 @@
     "district": "الغاط",
     "normalizedDistrict": "الغاط",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "علي القحطاني"
     ],
@@ -814,6 +832,7 @@
     "district": "القدس",
     "normalizedDistrict": "القدس",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -842,6 +861,7 @@
     "district": "القويعية",
     "normalizedDistrict": "القويعيه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -883,6 +903,7 @@
     "district": "القيروان",
     "normalizedDistrict": "القيروان",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -935,6 +956,7 @@
     "district": "المجمعة",
     "normalizedDistrict": "المجمعه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم",
       "علي القحطاني"
@@ -1023,6 +1045,7 @@
     "district": "المزاحمية",
     "normalizedDistrict": "المزاحميه",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1076,6 +1099,7 @@
     "district": "المعيزلية",
     "normalizedDistrict": "المعيزليه",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -1104,6 +1128,7 @@
     "district": "الملقا",
     "normalizedDistrict": "الملقا",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -1144,6 +1169,7 @@
     "district": "الملك عبدالله",
     "normalizedDistrict": "الملك عبدالله",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -1172,6 +1198,7 @@
     "district": "المناخ",
     "normalizedDistrict": "المناخ",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "تركي ظافر يحيى الاسمري"
     ],
@@ -1200,6 +1227,7 @@
     "district": "المهدية",
     "normalizedDistrict": "المهديه",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عبدالله علي العنزي",
       "أمجد الفالح"
@@ -1275,6 +1303,7 @@
     "district": "المونسية",
     "normalizedDistrict": "المونسيه",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -1303,6 +1332,7 @@
     "district": "النرجس",
     "normalizedDistrict": "النرجس",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم",
       "سفر العتيبي",
@@ -1358,6 +1388,7 @@
     "district": "بدر",
     "normalizedDistrict": "بدر",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "تركي ظافر يحيى الاسمري"
     ],
@@ -1386,6 +1417,7 @@
     "district": "تمرة",
     "normalizedDistrict": "تمره",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -1414,6 +1446,7 @@
     "district": "ثادق",
     "normalizedDistrict": "ثادق",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "علي القحطاني"
     ],
@@ -1454,6 +1487,7 @@
     "district": "حريملاء",
     "normalizedDistrict": "حريملاء",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "فهد العنزي"
     ],
@@ -1494,6 +1528,7 @@
     "district": "حطين",
     "normalizedDistrict": "حطين",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "عسكر لسلوم"
     ],
@@ -1534,6 +1569,7 @@
     "district": "حوطة بني تميم",
     "normalizedDistrict": "حوطه بني تميم",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -1562,6 +1598,7 @@
     "district": "خيران",
     "normalizedDistrict": "خيران",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -1590,6 +1627,7 @@
     "district": "رماح",
     "normalizedDistrict": "رماح",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "فهد العنزي"
     ],
@@ -1629,6 +1667,7 @@
     "district": "شقراء",
     "normalizedDistrict": "شقراء",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1682,6 +1721,7 @@
     "district": "ضرماء",
     "normalizedDistrict": "ضرماء",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1723,6 +1763,7 @@
     "district": "طويق",
     "normalizedDistrict": "طويق",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "أمجد الفالح",
       "عبدالله الأسود العنزي"
@@ -1777,6 +1818,7 @@
     "district": "ظهرة لبن",
     "normalizedDistrict": "ظهره لبن",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "أمجد الفالح"
     ],
@@ -1805,6 +1847,7 @@
     "district": "عرقة",
     "normalizedDistrict": "عرقه",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "أمجد الفالح"
     ],
@@ -1833,6 +1876,7 @@
     "district": "عفيف",
     "normalizedDistrict": "عفيف",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1909,6 +1953,7 @@
     "district": "مرات",
     "normalizedDistrict": "مرات",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1949,6 +1994,7 @@
     "district": "نفي",
     "normalizedDistrict": "نفي",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "سعيد الحارث"
     ],
@@ -1989,6 +2035,7 @@
     "district": "نمار",
     "normalizedDistrict": "نمار",
     "type": "حي بمدينة الرياض",
+    "isMaintenance": false,
     "programManagers": [
       "تركي ظافر يحيى الاسمري"
     ],
@@ -2017,6 +2064,7 @@
     "district": "وادي الدواسر",
     "normalizedDistrict": "وادي الدواسر",
     "type": "محافظة / مركز",
+    "isMaintenance": false,
     "programManagers": [
       "شاكر الحقباني"
     ],
@@ -2053,5 +2101,138 @@
         "status": "جاري"
       }
     ]
+  },
+  {
+    "id": "maint_1790706972687_635",
+    "district": "الرمال",
+    "normalizedDistrict": "الرمال",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي تابع للصيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:36:12.687Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707388259_91",
+    "district": "الخليج",
+    "normalizedDistrict": "الخليج",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:43:08.259Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707414627_148",
+    "district": "الربوه",
+    "normalizedDistrict": "الربوه",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:43:34.627Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707425127_10",
+    "district": "الريان",
+    "normalizedDistrict": "الريان",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:43:45.128Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707441624_616",
+    "district": "السويدي",
+    "normalizedDistrict": "السويدي",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:44:01.624Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707454236_250",
+    "district": "الروضة",
+    "normalizedDistrict": "الروضه",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:44:14.236Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
+  },
+  {
+    "id": "maint_1790707527347_939",
+    "district": "الدار البيضاء",
+    "normalizedDistrict": "الدار البيضاء",
+    "type": "حي تابع للتشغيل والصيانة",
+    "isMaintenance": true,
+    "notes": "حي صيانة (مستبعد مباشرة من المشاريع)",
+    "city": "مدينة الرياض",
+    "createdAt": "2026-09-29T18:45:27.347Z",
+    "programManagers": [
+      "إدارة التشغيل والصيانة"
+    ],
+    "contractors": [],
+    "sectors": [
+      "تشغيل وصيانة"
+    ],
+    "projectsCount": 0,
+    "projects": []
   }
 ]

@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { calculateStats, createManagersData } from '../pipeline/buildData.js'
+import { isDistrictInMaintenance } from '../pipeline/districtClassification.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -373,6 +374,20 @@ class ImportPipeline {
   // ===== المرحلة 5: الاستبعاد =====
   stage5_exclude(data) {
     return data.map(row => {
+      // فحص حي الصيانة: استبعاد مباشر من المشاريع دون الحاجة لربطه بأي مشروع
+      if (isDistrictInMaintenance(row.district)) {
+        return {
+          ...row,
+          project: null,
+          projectId: null,
+          programManager: null,
+          matched: false,
+          excluded: true,
+          excludedReason: `حي ${row.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
+          actionCategory: 'تشغيل وصيانة'
+        }
+      }
+
       // ⚠️ فحص خاص لمقاول الأعمال المدنية: إذا لم يكن بحي العوالي يعتبر تشغيل وصيانة فوراً
       const cName = (row.contractorName || row.contractor || '').toLowerCase()
       const isCivil = cName.includes('اعمال مدنية') || cName.includes('الاعمال المدنيه') || cName.includes('أعمال مدنية')

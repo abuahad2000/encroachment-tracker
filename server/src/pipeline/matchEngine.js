@@ -1,6 +1,7 @@
 import { normalizeArabic, similarity } from './normalize.js'
 import * as turf from '@turf/turf'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
+import { isDistrictInMaintenance, loadMaintenanceDistricts } from './districtClassification.js'
 
 const SIMILARITY_THRESHOLD = 0.82
 const MAINTENANCE_KEYWORDS = ['طارئ', 'انكسار', 'صيانة', 'دورية', 'إصلاح']
@@ -249,7 +250,19 @@ function matchProjectToFeature(project, feat) {
   return true
 }
 
-export function matchReportToProject(report, activeProjects, contractorsConfig) {
+export function matchReportToProject(report, activeProjects, contractorsConfig, maintenanceDistricts = null) {
+  // فحص مباشر: إذا كان الحي مصنف ضمن أحياء الصيانة، يُستبعد فوراً دون ربطه بأي مشروع رأسمالي
+  if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
+    return {
+      matched: false,
+      excluded: true,
+      excludedReason: `حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
+      confidence: 0,
+      reason: 'maintenance_district',
+      actionCategory: 'تشغيل وصيانة'
+    }
+  }
+
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
   // 1. فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
@@ -548,6 +561,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
 
   // تصفية المشاريع النشطة
   const activeProjects = projects.filter(p => ACTIVE_STATUSES.includes(p.status))
+  const maintenanceDistricts = loadMaintenanceDistricts()
 
   // تحضير مسبق للطبقات الجارية وحساب BBox
   const ongoingFeatures = [
@@ -590,6 +604,29 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       if (o.licenseNumber && rLic && String(o.licenseNumber).trim() === rLic) return true
       return false
     })
+
+    // استبعاد قطعي ومباشر لأي بلاغ يقع في حي مصنف للصيانة دون ربط بأي مشروع رأسمالي
+    if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
+      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
+      const today = new Date('2026-09-18')
+      const ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      const cls = classifyReportSectorFromText(report)
+      processed.push({
+        ...report,
+        matched: false,
+        excluded: true,
+        project: null,
+        programManager: null,
+        confidence: 0,
+        reason: 'maintenance_district',
+        excludedReason: `حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
+        actionCategory: 'تشغيل وصيانة',
+        isMaintenance: true,
+        sector: cls === 'عام' ? 'صرف' : cls,
+        ageDays
+      })
+      continue
+    }
 
     let result
     if (override?.excluded) {
@@ -679,7 +716,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         contractorName: effectiveContractor
       }
 
-      const match = matchReportToProject(reportToMatch, activeProjects, contractorsConfig)
+      const match = matchReportToProject(reportToMatch, activeProjects, contractorsConfig, maintenanceDistricts)
       result = {
         ...reportToMatch,
         ...match,

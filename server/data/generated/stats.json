@@ -1,16 +1,16 @@
 {
   "totalReports": 5300,
-  "totalActive": 30,
-  "pendingCount": 30,
-  "inProgressCount": 35,
-  "processedCount": 126,
-  "assignedCount": 191,
-  "excludedCount": 5035,
-  "matchedReports": 30,
-  "underProcessingCount": 30,
-  "archivedCount": 126,
-  "avgDelay": 176,
-  "medianDelay": 141,
+  "totalActive": 747,
+  "pendingCount": 747,
+  "inProgressCount": 826,
+  "processedCount": 570,
+  "assignedCount": 2143,
+  "excludedCount": 3145,
+  "matchedReports": 747,
+  "underProcessingCount": 747,
+  "archivedCount": 570,
+  "avgDelay": 135,
+  "medianDelay": 118,
   "maxDelay": 654,
   "statusDistribution": {
     "تمت المعالجة": 1654,
@@ -25,31 +25,23 @@
   },
   "topManagers": [
     {
-      "name": "عبدالله الأسود العنزي",
-      "count": 9
+      "name": "عسكر لسلوم",
+      "count": 732
     },
     {
       "name": "سعيد الحارث",
       "count": 8
     },
     {
-      "name": "تركي ظافر يحيى الاسمري",
-      "count": 5
-    },
-    {
-      "name": "عسكر لسلوم",
-      "count": 4
+      "name": "عبدالله الأسود العنزي",
+      "count": 6
     },
     {
       "name": "أمجد الفالح",
-      "count": 3
-    },
-    {
-      "name": "عبدالله علي العنزي",
       "count": 1
     }
   ],
-  "lastUpdate": "2026-09-29T17:57:48.689Z",
+  "lastUpdate": "2026-09-29T18:44:15.921Z",
   "totalProjects": 122,
   "activeProjects": 73,
   "deliveredProjects": 41
