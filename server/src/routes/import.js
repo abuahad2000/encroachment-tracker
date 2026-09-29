@@ -22,13 +22,27 @@ router.post(['/import-excel', '/excel'], upload.single('file'), async (req, res)
       return res.status(400).json({ success: false, error: 'لم يتم رفع أي ملف' })
     }
 
-    // قراءة ملف Excel
+    // قراءة ملف Excel مع الكشف التلقائي عن صف العناوين
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' })
     const sheetName = workbook.SheetNames[0]
-    const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName])
+    const sheet = workbook.Sheets[sheetName]
+
+    // فحص أول 10 صفوف لمعرفة صف العناوين الفعلي (تجاوز البانرات وعناوين التقارير)
+    const rowsGrid = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    let headerRowIndex = 0
+    for (let i = 0; i < Math.min(rowsGrid.length, 10); i++) {
+      const row = rowsGrid[i] || []
+      const nonEmpties = row.filter(c => c !== undefined && c !== null && String(c).trim() !== '')
+      if (nonEmpties.length >= 4) {
+        headerRowIndex = i
+        break
+      }
+    }
+
+    const rawData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex })
 
     if (!rawData || rawData.length === 0) {
-      return res.status(400).json({ success: false, error: 'الملف فارغ' })
+      return res.status(400).json({ success: false, error: 'الملف فارغ أو لا يحتوي على بيانات صالحة' })
     }
 
     // نسخ احتياطي قبل الاستيراد

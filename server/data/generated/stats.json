@@ -1,0 +1,40 @@
+{
+  "totalReports": 5300,
+  "totalActive": 16,
+  "pendingCount": 16,
+  "inProgressCount": 1,
+  "processedCount": 5,
+  "assignedCount": 22,
+  "excludedCount": 5196,
+  "matchedReports": 16,
+  "underProcessingCount": 16,
+  "archivedCount": 5,
+  "avgDelay": 121,
+  "medianDelay": 41,
+  "maxDelay": 654,
+  "statusDistribution": {
+    "تمت المعالجة": 1654,
+    "معاد من المقاول": 259,
+    "تحت معالجة المقاول": 2442,
+    "تحت معالجة الجهة المتعدية": 340,
+    "معاد من الجهة المتعدية": 226,
+    "تحت مراجعة الجهة المالكة": 59,
+    "بانتظار اعتماد الجهة المتعدية": 82,
+    "معاد للجهة المالكة": 237,
+    "بانتظار اعتماد المركز": 1
+  },
+  "topManagers": [
+    {
+      "name": "سعيد الحارث",
+      "count": 8
+    },
+    {
+      "name": "عبدالله الأسود العنزي",
+      "count": 8
+    }
+  ],
+  "lastUpdate": "2026-09-29T16:38:18.397Z",
+  "totalProjects": 122,
+  "activeProjects": 73,
+  "deliveredProjects": 41
+}

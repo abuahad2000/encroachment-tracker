@@ -72,15 +72,25 @@ export async function buildData(customReportsFile = null) {
         } catch (e) {}
       }
 
-      // 🛑 الملاذ الأخير: فقط إذا لم يوجد أي شيء على الإطلاق، أنشئ ملفات فارغة لمنع انهيار الـ Build
-      console.log('🔄 لم يتم العثور على أي بيانات، جاري تهيئة ملفات فارغة مؤقتاً...')
-      fs.writeFileSync(reportsPath, '[]', 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'projects.json'), '[]', 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'stats.json'), '{}', 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'managers.json'), '[]', 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify({ water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }, null, 2), 'utf-8')
+      // 🛑 في حال عدم وجود ملف بلاغات مسبق، نحرص دائماً على بناء المشاريع والطبقات الجغرافية من الملفات المصدرية
+      console.log('🔄 جاري بناء المشاريع والطبقات الجغرافية الأساسية...')
+      let projects = []
+      let geoJsonData = { water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }
+      try { projects = parseProjects() } catch(e) { console.warn('Error parsing projects:', e) }
+      try { geoJsonData = await parseAllKMZ() } catch(e) { console.warn('Error parsing KMZ:', e) }
+      const emptyReports = []
+      const stats = calculateStats(emptyReports, projects)
+      const managers = createManagersData(projects, emptyReports)
 
-      return { success: true, stats: { totalReports: 0 }, message: 'تم التهيئة ببيانات فارغة' }
+      if (!fs.existsSync(reportsPath)) {
+        fs.writeFileSync(reportsPath, '[]', 'utf-8')
+      }
+      fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2), 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify(geoJsonData, null, 2), 'utf-8')
+
+      return { success: true, stats, message: 'تم تهيئة المشاريع والطبقات بنجاح' }
     }
 
     // ==========================================

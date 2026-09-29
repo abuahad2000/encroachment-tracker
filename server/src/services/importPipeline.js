@@ -70,27 +70,67 @@ class ImportPipeline {
 
   stage1_clean(data) {
     const seen = new Set()
+
+    const getField = (row, keyPatterns) => {
+      const rowKeys = Object.keys(row)
+      for (const pattern of keyPatterns) {
+        const exact = rowKeys.find(k => k.trim() === pattern)
+        if (exact && row[exact] !== undefined && row[exact] !== null && String(row[exact]).trim() !== '') {
+          return row[exact]
+        }
+        const lowerExact = rowKeys.find(k => k.trim().toLowerCase() === pattern.toLowerCase())
+        if (lowerExact && row[lowerExact] !== undefined && row[lowerExact] !== null && String(row[lowerExact]).trim() !== '') {
+          return row[lowerExact]
+        }
+        const sub = rowKeys.find(k => k.includes(pattern))
+        if (sub && row[sub] !== undefined && row[sub] !== null && String(row[sub]).trim() !== '') {
+          return row[sub]
+        }
+      }
+      return ''
+    }
+
     return data
       .filter(row => row && typeof row === 'object')
-      .map(row => ({
-        id: row.id || row['رقم البلاغ'] || row.reportId,
-        licenseNumber: row.licenseNumber || row['رقم الرخصة'] || '',
-        district: row.district || row['الحي'] || row.city || '',
-        city: row.city || row['المحافظة'] || 'الرياض',
-        contractorName: row.contractorName || row.contractor || row['المقاول'] || '',
-        description: row.description || row['الوصف'] || row['Description'] || '',
-        status: row.status || row['الحالة'] || 'تحت معالجة المقاول',
-        latitude: parseFloat(row.latitude || row.lat || 0),
-        longitude: parseFloat(row.longitude || row.lng || row.lon || 0),
-        ageDays: parseInt(row.ageDays || row['أيام التأخير'] || 0),
-        projectName: row.projectName || row['اسم المشروع'] || '',
-        operationNumber: row.operationNumber || row['رقم العملية'] || '',
-        sector: row.sector || ''
-      }))
-      .filter(row => {
+      .map((row, idx) => {
+        const rawId = getField(row, ['رقم_بلاغ_التعدي', 'رقم بلاغ التعدي', 'رقم البلاغ', 'رقم_البلاغ', 'رقم التعدي', 'reportId', 'id', 'ID'])
+        const cleanId = rawId !== '' ? String(rawId).trim() : (idx + 1)
+
+        const rawLat = getField(row, ['خط_العرض', 'خط العرض', 'latitude', 'lat', 'خط عرض', 'Lat'])
+        const rawLng = getField(row, ['خط_الطول', 'خط الطول', 'longitude', 'lng', 'lon', 'خط طول', 'Lng'])
+
+        const rawContractor = getField(row, ['اسم المقاول', 'المقاول', 'المقاول_المعتمد', 'contractor', 'contractorName', 'اسم_المقاول'])
+        const rawDistrict = getField(row, ['الحي', 'حي', 'district', 'الشارع'])
+        const rawCity = getField(row, ['المدينة', 'المحافظة', 'city', 'governorate', 'location'])
+        const rawStatus = getField(row, ['حالة_البلاغ', 'حالة البلاغ', 'الحالة', 'status'])
+        const rawDesc = getField(row, ['وصف_التعدي', 'وصف التعدي', 'الوصف', 'description', 'Description', 'أثر التعدي'])
+        const rawLicense = getField(row, ['رقم_الرخصة', 'رقم الرخصة', 'الرخصة', 'licenseNumber', 'po'])
+        const rawProject = getField(row, ['اسم_المشروع', 'اسم المشروع', 'المشروع', 'name', 'projectName'])
+        const rawOp = getField(row, ['رقم_العملية', 'رقم العملية', 'operation_number', 'operationNumber'])
+        const rawManager = getField(row, ['مدير_البرنامج', 'مدير البرنامج', 'program_manager_nwc', 'programManager', 'program_manager'])
+        const rawAge = getField(row, ['أيام التأخير', 'أيام_التأخير', 'age_days', 'ageDays', 'age'])
+
+        return {
+          id: cleanId,
+          licenseNumber: String(rawLicense || '').trim(),
+          district: String(rawDistrict || '').trim(),
+          city: String(rawCity || 'الرياض').trim(),
+          contractorName: String(rawContractor || '').trim(),
+          description: String(rawDesc || '').trim(),
+          status: String(rawStatus || 'تحت معالجة المقاول').trim(),
+          latitude: parseFloat(rawLat || 0),
+          longitude: parseFloat(rawLng || 0),
+          ageDays: parseInt(rawAge || 0),
+          projectName: String(rawProject || '').trim(),
+          operationNumber: String(rawOp || '').trim(),
+          programManager: String(rawManager || '').trim(),
+          sector: getField(row, ['القطاع', 'sector', 'sub_program']) || ''
+        }
+      })
+      .filter((row, idx) => {
         if (row.latitude && (row.latitude < 15 || row.latitude > 30)) return false
         if (row.longitude && (row.longitude < 34 || row.longitude > 56)) return false
-        const key = row.licenseNumber || `${row.district}-${row.contractorName}`
+        const key = row.id ? String(row.id) : `${row.licenseNumber || idx}-${row.district}-${row.contractorName}`
         if (seen.has(key)) return false
         seen.add(key)
         return true
@@ -187,53 +227,85 @@ class ImportPipeline {
       let bestScore = 0
       let matchReason = ''
 
+      // 0. فحص مباشر بالمعرف إذا كان محدداً
+      if (row.projectId || row.id) {
+        const byId = projects.find(p => String(p.id).trim() === String(row.projectId || row.id).trim())
+        if (byId) {
+          matched++
+          return {
+            ...row,
+            project: byId,
+            projectId: byId.id,
+            programManager: byId.programManager || row.programManager,
+            projectManager: byId.projectManager,
+            contractor: byId.contractor || row.contractorName,
+            matched: true,
+            confidence: 'high',
+            confidenceScore: 100,
+            matchReason: 'تطابق معرف المشروع المباشر',
+            needsReview: false
+          }
+        }
+      }
+
       projects.forEach(project => {
         let score = 0
         let reasons = []
 
-        // المعيار 1: تطابق اسم المشروع (40 نقطة)
+        // المعيار 1: تطابق اسم المشروع
         if (row.projectName && project.name) {
           const rowName = row.projectName.toLowerCase().trim()
           const projName = project.name.toLowerCase().trim()
           if (rowName === projName) {
-            score += 40
+            score += 50
             reasons.push('تطابق تام في اسم المشروع')
           } else if (rowName.includes(projName) || projName.includes(rowName)) {
-            score += 25
+            score += 35
             reasons.push('تطابق جزئي في اسم المشروع')
           }
         }
 
-        // المعيار 2: تطابق رقم العملية (35 نقطة) - معيار حاسم
+        // المعيار 2: تطابق رقم العملية
         if (row.operationNumber && project.operationNumber) {
-          if (row.operationNumber === project.operationNumber) {
-            score += 35
+          if (row.operationNumber.trim() === project.operationNumber.trim()) {
+            score += 50
             reasons.push('تطابق رقم العملية')
           }
         }
 
-        // المعيار 3: تطابق المقاول والحي
-        if (row.contractorName && row.district && project.contractor && project.scope) {
-          const contractorMatch = row.contractorName.trim() === project.contractor.trim()
-          const districtMatch = project.scope.includes(row.district) || project.name.includes(row.district)
-          
+        // المعيار 3: تطابق مدير البرنامج المحدد في البلاغ
+        if (row.programManager && project.programManager) {
+          const rMgr = row.programManager.replace(/^م\.\s*/, '').replace(/^م\/\s*/, '').trim()
+          const pMgr = project.programManager.replace(/^م\.\s*/, '').replace(/^م\/\s*/, '').trim()
+          if (rMgr && pMgr && (rMgr === pMgr || rMgr.includes(pMgr) || pMgr.includes(rMgr))) {
+            score += 30
+            reasons.push('تطابق مدير البرنامج')
+          }
+        }
+
+        // المعيار 4: تطابق المقاول والحي
+        if (row.contractorName && project.contractor) {
+          const rCont = row.contractorName.trim().toLowerCase()
+          const pCont = project.contractor.trim().toLowerCase()
+          const contractorMatch = rCont === pCont || rCont.includes(pCont) || pCont.includes(rCont)
+          const districtMatch = row.district && project.scope && (project.scope.includes(row.district) || project.name?.includes(row.district))
+
           if (contractorMatch && districtMatch) {
-            score += 25
+            score += 45
             reasons.push('تطابق المقاول والحي')
-          } else if (contractorMatch && !districtMatch) {
-            // ⚠️ هنا يكمن الحل: التحقق من تفرد المقاول
-            const contractorInfo = contractorManagerCount[row.contractorName]
+          } else if (contractorMatch) {
+            const contractorInfo = contractorManagerCount[project.contractor.trim()]
             if (contractorInfo && contractorInfo.isUnique) {
-              score += 15 // المقاول فريد، الربط آمن
+              score += 35
               reasons.push('تطابق المقاول (فريد لمدير واحد)')
             } else {
-              score += 5 // المقاول متداخل، نقاط قليلة جداً لمنع الربط الخاطئ
-              reasons.push('تطابق المقاول فقط (متداخل - يحتاج تحقق يدوي)')
+              score += 20
+              reasons.push('تطابق المقاول')
             }
           }
         }
 
-        // المعيار 4: تطابق القطاع (5 نقاط)
+        // المعيار 5: تطابق القطاع
         if (row.sector && project.sector) {
           if (row.sector === project.sector) {
             score += 5
@@ -249,33 +321,20 @@ class ImportPipeline {
       })
 
       // ===== قرار الربط بناءً على الثقة =====
-      if (bestScore >= 70) {
+      if (bestScore >= 35 && bestMatch) {
         matched++
         return {
           ...row,
           project: bestMatch,
           projectId: bestMatch.id,
-          programManager: bestMatch.programManager,
+          programManager: bestMatch.programManager || row.programManager,
           projectManager: bestMatch.projectManager,
           contractor: bestMatch.contractor || row.contractorName,
           matched: true,
-          confidence: 'high',
+          confidence: bestScore >= 50 ? 'high' : 'medium',
           confidenceScore: bestScore,
           matchReason,
-          needsReview: false
-        }
-      } else if (bestScore >= 45) {
-        lowConfidence++
-        return {
-          ...row,
-          project: bestMatch,
-          projectId: bestMatch.id,
-          programManager: bestMatch ? bestMatch.programManager : row.programManager,
-          matched: true,
-          confidence: 'medium',
-          confidenceScore: bestScore,
-          matchReason,
-          needsReview: true // سيظهر في صفحة المراجعة
+          needsReview: bestScore < 50
         }
       } else {
         unmatched++
@@ -294,17 +353,26 @@ class ImportPipeline {
     return { data: mappedData, matched, unmatched, lowConfidence }
   }
 
+  // ===== المرحلة 5: الاستبعاد =====
   stage5_exclude(data) {
     return data.map(row => {
+      // ⚠️ حماية شركة العرين - لا تستبعدها أبداً
       const contractor = (row.contractorName || row.contractor || '').toLowerCase()
       if (contractor.includes('العرين')) {
         return { ...row, excluded: false, protectedByRule: 'Al-Areen protection' }
       }
 
+      // استبعاد البلاغات التي تمت معالجتها
       if (row.status === 'تمت المعالجة') {
         return { ...row, excluded: true, excludedReason: 'تمت المعالجة' }
       }
 
+      // البلاغات المرتبطة بمشروع لا تُستبعد
+      if (row.matched && row.project) {
+        return { ...row, excluded: false }
+      }
+
+      // استبعاد غير المرتبط
       if (!row.matched && !row.project) {
         return { ...row, excluded: true, excludedReason: 'غير مرتبط بمشروع رأسمالي' }
       }
