@@ -581,29 +581,34 @@ export default function ReportsTable() {
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
                         {group.items.map((r) => {
-                          const isWater = (r.sector === 'مياه') || (r.project?.name?.includes('مياه') || r.project?.subProgram?.includes('مياه'))
+                          const sec = String(r.sector || '').toLowerCase()
+                          const pName = String(r.project?.name || '').toLowerCase()
+                          const pSub = String(r.project?.subProgram || '').toLowerCase()
+                          const isSanitation = sec === 'صرف' || sec === 'sanitation' || /صرف|صحي|مجاري|معالجة|بيارة|بياره|منهل|مناهل|خط طرد/.test(pName) || /صرف|صحي|مجاري|معالجة/.test(pSub) || /صرف|صحي|مجاري/.test(r.description || '')
+                          const isWater = !isSanitation && (sec === 'مياه' || sec === 'water' || pSub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف')))
                           const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
 
                           return (
                             <tr key={r.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-750 transition">
-                              <td className="px-3 py-2 text-center font-mono font-bold text-gray-900 dark:text-white">
+                              <td className="px-3 py-2 text-center font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap">
                                 {r.id}
                               </td>
-                              <td className="px-2 py-2 text-center">
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${isWater ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
-                                  {isWater ? '💧 مياه' : '🚰 صرف'}
+                              <td className="px-2 py-2 text-center whitespace-nowrap">
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${isWater ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'}`}>
+                                  <span>{isWater ? '💧' : '🚰'}</span>
+                                  <span>{isWater ? 'مياه' : 'صرف'}</span>
                                 </span>
                               </td>
-                              <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">
+                              <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap truncate max-w-[280px]" title={r.project?.name}>
                                 {r.project?.name || (r.excluded ? r.excludedReason : 'غير مسند')}
                               </td>
-                              <td className="px-3 py-2 font-bold text-gray-800 dark:text-gray-200">
+                              <td className="px-3 py-2 font-bold text-gray-800 dark:text-gray-200 whitespace-nowrap">
                                 {r.excluded ? '-' : (r.project?.programManager || '-')}
                               </td>
-                              <td className="px-3 py-2 text-gray-800 dark:text-gray-200">
+                              <td className="px-3 py-2 text-gray-800 dark:text-gray-200 whitespace-nowrap truncate max-w-[180px]" title={effectiveContractor}>
                                 {effectiveContractor}
                               </td>
-                              <td className="px-2 py-2 text-center">
+                              <td className="px-2 py-2 text-center whitespace-nowrap">
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                                   r.excluded ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' :
                                   r.status === 'تحت معالجة المقاول' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
@@ -680,7 +685,11 @@ export default function ReportsTable() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
                 {filtered.map(r => {
                   const effectiveContractor = r.contractorName || r.project?.contractor || 'غير محدد'
-                  const isWater = (r.sector === 'مياه') || (r.project?.name?.includes('مياه') || r.project?.subProgram?.includes('مياه'))
+                  const sec = String(r.sector || '').toLowerCase()
+                  const pName = String(r.project?.name || '').toLowerCase()
+                  const pSub = String(r.project?.subProgram || '').toLowerCase()
+                  const isSanitation = sec === 'صرف' || sec === 'sanitation' || /صرف|صحي|مجاري|معالجة|بيارة|بياره|منهل|مناهل|خط طرد/.test(pName) || /صرف|صحي|مجاري|معالجة/.test(pSub) || /صرف|صحي|مجاري/.test(r.description || '')
+                  const isWater = !isSanitation && (sec === 'مياه' || sec === 'water' || pSub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف')))
                   const reasonLabel = r.reason?.includes('spatial') ? '📍 خريطة KMZ' :
                                       r.reason?.includes('governorate') ? '🏛️ مقاول المحافظات' :
                                       r.reason?.includes('aswad_exception') ? '⭐ استثناء الرياض' :
@@ -723,23 +732,23 @@ export default function ReportsTable() {
                         )}
                       </td>
 
-                      {/* المشروع المسند كامل ومنسق أو سبب الاستبعاد */}
-                      <td className="px-3 py-3 min-w-[280px] max-w-[420px] whitespace-normal leading-relaxed text-right" title={r.project?.name}>
+                      {/* المشروع المسند بسطر واحد مع رقم العملية */}
+                      <td className="px-3 py-3 whitespace-nowrap text-right" title={`${r.project?.name || ''} ${r.project?.operationNumber || ''}`}>
                         {r.excluded ? (
-                          <span className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-1 rounded-lg border border-red-200 dark:border-red-900 inline-block text-xs">
+                          <span className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-lg border border-red-200 dark:border-red-900 inline-flex items-center gap-1 text-xs whitespace-nowrap">
                             🚫 {r.excludedReason || 'مستبعد من نطاق مشاريع مدير البرنامج'}
                           </span>
                         ) : (
-                          <>
-                            <span className="font-semibold block text-gray-900 dark:text-gray-100 text-xs">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap max-w-[360px]">
+                            <span className="font-semibold text-gray-900 dark:text-gray-100 text-xs truncate" title={r.project?.name}>
                               {r.project?.name || 'غير مسند'}
                             </span>
                             {r.project?.operationNumber && (
-                              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono block mt-0.5">
-                                {r.project.operationNumber}
+                              <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono shrink-0 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                                #{r.project.operationNumber}
                               </span>
                             )}
-                          </>
+                          </div>
                         )}
                       </td>
 
@@ -752,24 +761,24 @@ export default function ReportsTable() {
                         )}
                       </td>
 
-                      {/* المقاول */}
-                      <td className="px-3 py-3 min-w-[180px] whitespace-normal leading-snug">
+                      {/* المقاول بسطر واحد */}
+                      <td className="px-3 py-3 whitespace-nowrap">
                         {r.excluded ? (
-                          <div className="flex flex-col gap-1">
-                            <span className={`font-semibold ${(!r.contractorName || r.contractorName === 'NULL') ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
+                          <div className="flex items-center gap-1.5 whitespace-nowrap max-w-[240px]">
+                            <span className={`font-semibold truncate ${(!r.contractorName || r.contractorName === 'NULL') ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`} title={r.contractorName}>
                               {r.contractorName && r.contractorName !== 'NULL' ? r.contractorName : 'غير محدد بالملف'}
                             </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold w-fit">
-                              مقاول الملف الأصلي
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold shrink-0">
+                              مقاول الملف
                             </span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`font-semibold ${effectiveContractor === 'غير محدد' ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`}>
+                          <div className="flex items-center gap-1.5 whitespace-nowrap max-w-[240px]">
+                            <span className={`font-semibold truncate ${effectiveContractor === 'غير محدد' ? 'text-gray-400 italic' : 'text-gray-900 dark:text-gray-100'}`} title={effectiveContractor}>
                               {effectiveContractor}
                             </span>
                             {(r.customContractor || r.isLocked || r.lockedContractor) && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800" title="تم تثبيت المقاول يدوياً لهذا البلاغ">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-800 shrink-0" title="تم تثبيت المقاول يدوياً لهذا البلاغ">
                                 🔒 مثبت
                               </span>
                             )}

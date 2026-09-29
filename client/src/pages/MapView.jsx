@@ -16,6 +16,41 @@ function MapViewUpdater({ activeTab }) {
   return null
 }
 
+// دالة فحص دقيقة للتحقق من أن المشروع أو الطبقة تتبع الصرف الصحي قطيعاً
+export function isSanitationItem(item) {
+  if (!item) return false
+  const sec = String(item.sector || '').toLowerCase()
+  if (sec === 'sanitation' || sec === 'صرف') return true
+  if (sec === 'water' || sec === 'مياه') return false
+
+  const name = String(item.projectName || item.name || '').toLowerCase()
+  const sub = String(item.subProgram || '').toLowerCase()
+  const folder = String(item.folder || '').toLowerCase()
+  const desc = String(item.description || '').toLowerCase()
+  const text = `${name} ${sub} ${folder} ${desc}`
+
+  // أي دلالة على الصرف الصحي تلغي اعتباره مياه
+  return /صرف|صحي|مجاري|معالجة|بيارة|بياره|منهل|مناهل|خط طرد/.test(text)
+}
+
+// دالة فحص دقيقة للتحقق من أن المشروع أو الطبقة تتبع شبكات المياه حصراً
+export function isWaterItem(item) {
+  if (!item) return false
+  if (isSanitationItem(item)) return false
+
+  const sec = String(item.sector || '').toLowerCase()
+  if (sec === 'water' || sec === 'مياه') return true
+
+  const name = String(item.projectName || item.name || '').toLowerCase()
+  const sub = String(item.subProgram || '').toLowerCase()
+  const folder = String(item.folder || '').toLowerCase()
+  const text = `${name} ${sub} ${folder}`
+
+  // إزالة اسم شركة المياه الوطنية لتفادي تصنيف الصرف خطأً
+  const clean = text.replace(/شرك[ةه]\s+المياه(\s+الوطني[ةه])?/gi, '')
+  return clean.includes('مياه') || sub.includes('مياه') || folder.includes('مياه')
+}
+
 export default function MapView() {
   const [rawData, setRawData] = useState(null)
   const [reports, setReports] = useState([])
@@ -25,7 +60,8 @@ export default function MapView() {
   const [selectedAssignManager, setSelectedAssignManager] = useState({})
   const [isAssigning, setIsAssigning] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState('all') // 'capital-water' | 'maintenance-water' | ...
+  const [activeTab, setActiveTab] = useState('all') // 'all' | 'water' | 'sanitation' | 'governorates'
+  const [phaseFilter, setPhaseFilter] = useState('all') // 'all' | 'capital' | 'maintenance'
   const [searchQuery, setSearchQuery] = useState('')
   const [showReportPins, setShowReportPins] = useState(true)
   const [pinStatusFilter, setPinStatusFilter] = useState('contractor') // 'contractor' | 'in_progress' | 'all'
@@ -191,19 +227,19 @@ export default function MapView() {
     const set = new Set()
     let pool = pinStatusFilter === 'contractor' ? contractorPendingReports : pendingReports
     if (activeTab === 'water') {
-      pool = pool.filter(r => {
-        const sec = r.sector || ''
-        const sub = r.project?.subProgram || ''
-        const pName = r.project?.name || ''
-        return sec === 'مياه' || sub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف'))
-      })
+      pool = pool.filter(r => isWaterItem({
+        sector: r.sector,
+        projectName: r.project?.name,
+        subProgram: r.project?.subProgram,
+        description: r.description
+      }))
     } else if (activeTab === 'sanitation') {
-      pool = pool.filter(r => {
-        const sec = r.sector || ''
-        const sub = r.project?.subProgram || ''
-        const pName = r.project?.name || ''
-        return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
-      })
+      pool = pool.filter(r => isSanitationItem({
+        sector: r.sector,
+        projectName: r.project?.name,
+        subProgram: r.project?.subProgram,
+        description: r.description
+      }))
     } else if (activeTab === 'governorates') {
       pool = pool.filter(r => {
         const isGov = r.city && !r.city.includes('الرياض')
@@ -242,19 +278,19 @@ export default function MapView() {
 
     // 1. Strict sector filtering
     if (activeTab === 'water') {
-      list = list.filter(r => {
-        const sec = r.sector || ''
-        const sub = r.project?.subProgram || ''
-        const pName = r.project?.name || ''
-        return sec === 'مياه' || sub.includes('مياه') || (pName.includes('مياه') && !pName.includes('صرف'))
-      })
+      list = list.filter(r => isWaterItem({
+        sector: r.sector,
+        projectName: r.project?.name,
+        subProgram: r.project?.subProgram,
+        description: r.description
+      }))
     } else if (activeTab === 'sanitation') {
-      list = list.filter(r => {
-        const sec = r.sector || ''
-        const sub = r.project?.subProgram || ''
-        const pName = r.project?.name || ''
-        return sec === 'صرف' || sub.includes('صرف') || pName.includes('صرف')
-      })
+      list = list.filter(r => isSanitationItem({
+        sector: r.sector,
+        projectName: r.project?.name,
+        subProgram: r.project?.subProgram,
+        description: r.description
+      }))
     } else if (activeTab === 'governorates') {
       list = list.filter(r => {
         const isGov = r.city && !r.city.includes('الرياض')
@@ -306,22 +342,26 @@ export default function MapView() {
     return 'capital'
   }
 
-  // Filter polygon/linestring features based on tab and search
+  // Filter polygon/linestring features based on tab, phase and search
   const filteredFeatures = useMemo(() => {
     if (!rawData) return []
 
-    let list = rawData.features || []
-
+    let list = []
     if (activeTab === 'governorates') {
       list = rawData.governoratesFeatures || []
-    } else if (activeTab !== 'all') {
-      const [phase, sector] = activeTab.split('-')
-      list = (rawData.features || []).filter(f => {
-        const featurePhase = classifyProjectPhase(f.properties)
-        const isWater = (f.properties?.sector || f.properties?.folder || f.properties?.name || '').includes('مياه')
-        const featureSector = isWater ? 'water' : 'sanitation'
-        return featurePhase === phase && featureSector === sector
-      })
+    } else if (activeTab === 'water') {
+      // فقط شبكات المياه الحقيقية بدون أي صرف
+      list = (rawData.waterFeatures || []).filter(f => !isSanitationItem(f.properties))
+    } else if (activeTab === 'sanitation') {
+      // فقط شبكات الصرف الصحي الحقيقية
+      list = (rawData.sanitationFeatures || []).filter(f => isSanitationItem(f.properties) || f.properties?.sector === 'sanitation')
+    } else {
+      list = rawData.features || []
+    }
+
+    // تصفية المرحلة عند الرغبة (رأسمالي / صيانة)
+    if (phaseFilter !== 'all') {
+      list = list.filter(f => classifyProjectPhase(f.properties) === phaseFilter)
     }
 
     if (!searchQuery.trim()) return list
@@ -336,7 +376,7 @@ export default function MapView() {
       const cont = (f.properties?.contractor || '').toLowerCase()
       return name.includes(q) || op.includes(q) || folder.includes(q) || prog.includes(q) || proj.includes(q) || cont.includes(q)
     })
-  }, [rawData, activeTab, searchQuery])
+  }, [rawData, activeTab, phaseFilter, searchQuery])
 
   const onEachFeature = (feature, layer) => {
     const props = feature.properties || {}
@@ -353,11 +393,11 @@ export default function MapView() {
     let sectorBg = '#0284c7'
 
     if (isGov) {
-      const isWater = props.sector === 'water' || (props.name && props.name.includes('مياه'))
+      const isWater = isWaterItem(props)
       sectorLabel = isWater ? '🏛️ نطاق المحافظات (مياه)' : '🏛️ نطاق المحافظات (صرف صحي)'
       sectorBg = isWater ? '#d97706' : '#7c3aed'
     } else {
-      const isWater = props.sector === 'water' || (props.folder && props.folder.includes('مياه')) || (props.subProgram && props.subProgram.includes('مياه'))
+      const isWater = isWaterItem(props)
       sectorLabel = isWater ? '💧 قطاع المياه' : '🚰 قطاع الصرف الصحي'
       sectorBg = isWater ? '#0284c7' : '#059669'
     }
@@ -402,7 +442,7 @@ export default function MapView() {
     if (feature.geometry.type === 'Point') return {}
 
     if (feature.properties?.isGovernorate) {
-      const isWater = feature.properties?.sector === 'water' || feature.properties?.name?.includes('مياه')
+      const isWater = isWaterItem(feature.properties)
       return {
         color: isWater ? '#d97706' : '#7c3aed', // Amber for water, Violet for sanitation
         weight: 2.5,
@@ -413,12 +453,12 @@ export default function MapView() {
     }
 
     const phase = classifyProjectPhase(feature.properties)
-    const isWater = (feature.properties?.sector || feature.properties?.folder || feature.properties?.name || '').includes('مياه')
+    const isWater = isWaterItem(feature.properties)
 
     if (phase === 'capital') {
-      // مشاريع رأسمالية: ألوان زاهية وواضحة
+      // مشاريع رأسمالية: ألوان زاهية وواضحة (أزرق للمياه، أخضر للصرف)
       return {
-        color: isWater ? '#0284c7' : '#059669', // أزرق للمياه، أخضر للصرف
+        color: isWater ? '#0284c7' : '#059669',
         weight: 3,
         opacity: 0.9,
         fillOpacity: 0.3,
@@ -446,15 +486,10 @@ export default function MapView() {
     }
   }
 
-  const capitalWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
-  const maintenanceWaterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'maintenance').length, [rawData])
-  const capitalSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'capital').length, [rawData])
-  const maintenanceSanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => classifyProjectPhase(f.properties) === 'maintenance').length, [rawData])
-
-  const waterCount = rawData?.stats?.water ?? (rawData?.waterFeatures?.length || 0)
-  const sanitationCount = rawData?.stats?.sanitation ?? (rawData?.sanitationFeatures?.length || 0)
+  const waterCount = useMemo(() => (rawData?.waterFeatures || []).filter(f => !isSanitationItem(f.properties)).length, [rawData])
+  const sanitationCount = useMemo(() => (rawData?.sanitationFeatures || []).filter(f => isSanitationItem(f.properties) || f.properties?.sector === 'sanitation').length, [rawData])
   const governoratesCount = rawData?.stats?.governorates ?? (rawData?.governoratesFeatures?.length || 0)
-  const totalCount = rawData?.stats?.total ?? (rawData?.features?.length || 0)
+  const totalCount = waterCount + sanitationCount + governoratesCount
 
   if (loading) {
     return (
@@ -513,143 +548,140 @@ export default function MapView() {
         </div>
       </div>
 
-      {/* Layer Tabs & Controls Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-2 bg-gray-100 dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700">
-        {/* Separated Layer Tabs */}
-        <div className="flex flex-wrap gap-1.5">
+      {/* Layer Tabs & Controls Bar - بسطر واحد أنيق ومضغوط */}
+      <div className="flex items-center justify-between gap-2 p-1.5 bg-gray-100/90 dark:bg-gray-800/90 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-x-auto whitespace-nowrap">
+        {/* التبويبات الرئيسية بسطر واحد */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'all'
-                ? 'bg-white dark:bg-gray-700 text-primary-700 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+                ? 'bg-white dark:bg-gray-700 text-blue-700 dark:text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-750'
             }`}
           >
             <span>🗺️ الكل</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'all' ? 'bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'all' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'bg-gray-200 dark:bg-gray-600'}`}>
               {totalCount}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('capital-water')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'capital-water'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            onClick={() => setActiveTab('water')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+              activeTab === 'water'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-750'
             }`}
           >
-            <span>💧 مياه - رأسمالي</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'capital-water' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'}`}>
-              {capitalWaterCount}
+            <span>💧 شبكات المياه</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'water' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'}`}>
+              {waterCount}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('maintenance-water')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'maintenance-water'
-                ? 'bg-slate-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+            onClick={() => setActiveTab('sanitation')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+              activeTab === 'sanitation'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-750'
             }`}
           >
-            <span>🛠️ مياه - صيانة</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'maintenance-water' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-800 dark:bg-slate-900 dark:text-slate-200'}`}>
-              {maintenanceWaterCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('capital-sanitation')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'capital-sanitation'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
-            }`}
-          >
-            <span>🚰 صرف - رأسمالي</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'capital-sanitation' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
-              {capitalSanitationCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('maintenance-sanitation')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'maintenance-sanitation'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
-            }`}
-          >
-            <span>🔧 صرف - صيانة</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'maintenance-sanitation' ? 'bg-purple-800 text-white' : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-200'}`}>
-              {maintenanceSanitationCount}
+            <span>🚰 شبكات الصرف الصحي</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'sanitation' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>
+              {sanitationCount}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('governorates')}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === 'governorates'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700/50'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-750'
             }`}
           >
             <span>🏛️ نطاق المحافظات</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'governorates' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTab === 'governorates' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}>
               {governoratesCount}
             </span>
           </button>
+
+          {/* فلتر مرحلة المشروع: رأسمالي أو صيانة */}
+          <div className="flex items-center bg-gray-200/80 dark:bg-gray-900/60 p-0.5 rounded-xl text-[11px] font-bold mr-1 shrink-0">
+            <button
+              onClick={() => setPhaseFilter('all')}
+              className={`px-2 py-1 rounded-lg transition ${phaseFilter === 'all' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'}`}
+              title="كافة المراحل"
+            >
+              الكل
+            </button>
+            <button
+              onClick={() => setPhaseFilter('capital')}
+              className={`px-2 py-1 rounded-lg transition ${phaseFilter === 'capital' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'}`}
+              title="مشاريع رأسمالية جارية فقط"
+            >
+              🏗️ رأسمالي
+            </button>
+            <button
+              onClick={() => setPhaseFilter('maintenance')}
+              className={`px-2 py-1 rounded-lg transition ${phaseFilter === 'maintenance' ? 'bg-slate-600 text-white shadow-2xs' : 'text-gray-500 hover:text-gray-900'}`}
+              title="مشاريع صيانة وتسليم فقط"
+            >
+              🔧 صيانة
+            </button>
+          </div>
         </div>
 
-        {/* Encroachment Report Pin Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Toggle Pins Button */}
+        {/* أدوات وفلاتر البلاغات بسطر واحد */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* زر إظهار/إخفاء البلاغات */}
           <button
             onClick={() => setShowReportPins(!showReportPins)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition shadow-2xs shrink-0 ${
               showReportPins
-                ? 'bg-red-600 text-white ring-2 ring-red-300 dark:ring-red-900'
+                ? 'bg-red-600 text-white ring-1 ring-red-300 dark:ring-red-900'
                 : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600'
             }`}
           >
             <span>📍</span>
-            <span>{showReportPins ? 'إخفاء النقاط' : 'إظهار نقاط البلاغات'}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showReportPins ? 'bg-red-800 text-white font-mono' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            <span>{showReportPins ? 'إخفاء النقاط' : 'نقاط البلاغات'}</span>
+            <span className={`text-[10px] px-1 rounded-full ${showReportPins ? 'bg-red-800 text-white font-mono' : 'bg-gray-200 dark:bg-gray-600'}`}>
               {displayedReportPins.length}
             </span>
           </button>
 
-          {/* Toggle Excluded Projects Layer Button */}
+          {/* زر المستبعدة */}
           <button
             onClick={() => setShowExcludedPins(!showExcludedPins)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition shadow-2xs shrink-0 ${
               showExcludedPins
-                ? 'bg-amber-600 text-white ring-2 ring-amber-300 dark:ring-amber-900'
+                ? 'bg-amber-600 text-white ring-1 ring-amber-300 dark:ring-amber-900'
                 : 'bg-white dark:bg-gray-700 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
             }`}
-            title="إظهار البلاغات المستبعدة من النطاق مع إمكانية إعادة الإسناد والتحديث الحقيقي"
+            title="إظهار البلاغات المستبعدة"
           >
             <span>🚫</span>
-            <span>{showExcludedPins ? 'إخفاء المستبعدة' : 'المشاريع المستبعدة'}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${showExcludedPins ? 'bg-amber-800 text-white font-mono' : 'bg-amber-100 dark:bg-amber-950'}`}>
+            <span>{showExcludedPins ? 'إخفاء المستبعدة' : 'المستبعدة'}</span>
+            <span className={`text-[10px] px-1 rounded-full ${showExcludedPins ? 'bg-amber-800 text-white font-mono' : 'bg-amber-100 dark:bg-amber-950'}`}>
               {excludedReports.length}
             </span>
           </button>
 
-          {/* Status Filter Tabs for Pins */}
+          {/* فلاتر حالة البلاغات */}
           {showReportPins && (
-            <div className="flex items-center bg-white dark:bg-gray-700 p-0.5 rounded-xl border border-gray-300 dark:border-gray-600 text-[11px]">
+            <div className="flex items-center bg-white dark:bg-gray-700 p-0.5 rounded-xl border border-gray-300 dark:border-gray-600 text-[11px] shrink-0">
               <button
                 onClick={() => setPinStatusFilter('contractor')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
                   pinStatusFilter === 'contractor'
-                    ? 'bg-red-600 text-white shadow-sm'
+                    ? 'bg-red-600 text-white shadow-2xs'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
                 }`}
-                title="عرض البلاغات التي تحت معالجة المقاول فقط (مطابق لتقرير الإدارة)"
+                title="تحت معالجة المقاول"
               >
-                <span>⚠️ تحت معالجة المقاول</span>
+                <span>⚠️ المقاول</span>
                 <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'contractor' ? 'bg-red-800 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
                   {contractorPendingReports.length}
                 </span>
@@ -657,14 +689,14 @@ export default function MapView() {
 
               <button
                 onClick={() => setPinStatusFilter('in_progress')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
                   pinStatusFilter === 'in_progress'
-                    ? 'bg-sky-600 text-white shadow-sm'
+                    ? 'bg-sky-600 text-white shadow-2xs'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
                 }`}
-                title="عرض البلاغات التي تحت الإجراء"
+                title="تحت الإجراء"
               >
-                <span>🔄 تحت الإجراء</span>
+                <span>🔄 الإجراء</span>
                 <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'in_progress' ? 'bg-sky-800 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
                   {inProgressReports.length}
                 </span>
@@ -672,12 +704,12 @@ export default function MapView() {
 
               <button
                 onClick={() => setPinStatusFilter('all')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
                   pinStatusFilter === 'all'
-                    ? 'bg-gray-900 text-white shadow-sm'
+                    ? 'bg-gray-900 text-white shadow-2xs'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
                 }`}
-                title="عرض كافة البلاغات النشطة"
+                title="كافة البلاغات"
               >
                 <span>الكل</span>
                 <span className={`text-[10px] px-1 rounded-full ${pinStatusFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}>
@@ -687,14 +719,14 @@ export default function MapView() {
             </div>
           )}
 
-          {/* Manager Filter */}
+          {/* اختيار مدير البرنامج */}
           {showReportPins && (
             <select
               value={selectedManager}
               onChange={e => setSelectedManager(e.target.value)}
-              className="px-3 py-1.5 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 font-medium"
+              className="px-2.5 py-1 text-xs rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-red-500 font-bold shrink-0 max-w-[160px] truncate"
             >
-              <option value="all">كافة مدراء البرامج ({availableManagers.length})</option>
+              <option value="all">كافة المدراء ({availableManagers.length})</option>
               {availableManagers.map(mgr => {
                 const count = (pinStatusFilter === 'contractor' ? contractorPendingReports : (pinStatusFilter === 'in_progress' ? inProgressReports : pendingReports)).filter(r => r.project?.programManager === mgr).length
                 return (
