@@ -5,6 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { pipeline } from '../services/importPipeline.js'
+import { calculateStats, createManagersData } from '../pipeline/buildData.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = express.Router()
@@ -79,6 +80,20 @@ router.post(['/import-rollback', '/rollback'], async (req, res) => {
     fs.copyFileSync(backupFile, reportsPath)
     if (fs.existsSync(path.dirname(generatedReportsPath))) {
       fs.copyFileSync(backupFile, generatedReportsPath)
+    }
+
+    const projectsPath = path.join(__dirname, '../../data/generated/projects.json')
+    if (fs.existsSync(projectsPath)) {
+      try {
+        const restoredReports = JSON.parse(fs.readFileSync(backupFile, 'utf8'))
+        const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'))
+        const updatedStats = calculateStats(restoredReports, projects)
+        const updatedManagers = createManagersData(projects, restoredReports)
+        fs.writeFileSync(path.join(__dirname, '../../data/generated/stats.json'), JSON.stringify(updatedStats, null, 2), 'utf8')
+        fs.writeFileSync(path.join(__dirname, '../../data/generated/managers.json'), JSON.stringify(updatedManagers, null, 2), 'utf8')
+      } catch (e) {
+        console.error('Error recalculating stats during rollback:', e)
+      }
     }
 
     res.json({ success: true, message: 'تم التراجع بنجاح', restoredFrom: latestBackup })

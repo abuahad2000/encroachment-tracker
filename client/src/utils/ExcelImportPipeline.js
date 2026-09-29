@@ -40,6 +40,38 @@ const getStoredValue = (key) => {
   return null
 }
 
+const refreshAppsmithQueries = async () => {
+  const runSafe = async (queryObj) => {
+    if (typeof queryObj !== 'undefined' && typeof queryObj.run === 'function') {
+      try {
+        await queryObj.run()
+      } catch (err) {
+        console.warn('Appsmith query execution warning:', err)
+      }
+    }
+  }
+
+  // 1. التقارير
+  if (typeof getReports !== 'undefined') await runSafe(getReports)
+  else if (typeof getReportsQuery !== 'undefined') await runSafe(getReportsQuery)
+
+  // 2. الإحصائيات
+  if (typeof getStats !== 'undefined') await runSafe(getStats)
+  else if (typeof getStatsQuery !== 'undefined') await runSafe(getStatsQuery)
+
+  // 3. المشاريع
+  if (typeof getProjects !== 'undefined') await runSafe(getProjects)
+  else if (typeof getProjectsQuery !== 'undefined') await runSafe(getProjectsQuery)
+
+  // 4. المدراء
+  if (typeof getManagers !== 'undefined') await runSafe(getManagers)
+  else if (typeof getManagersQuery !== 'undefined') await runSafe(getManagersQuery)
+  else if (typeof getProgramManagers !== 'undefined') await runSafe(getProgramManagers)
+
+  // 5. المستبعدات
+  if (typeof getExcludedProjects !== 'undefined') await runSafe(getExcludedProjects)
+}
+
 export const ExcelImportPipeline = {
   currentStage: 0,
   totalStages: 6,
@@ -88,16 +120,8 @@ export const ExcelImportPipeline = {
           CacheManager.clearAllCaches()
         }
 
-        // تشغيل استعلامات Appsmith إذا كانت معرفة
-        if (typeof getReportsQuery !== 'undefined' && typeof getReportsQuery.run === 'function') {
-          await getReportsQuery.run()
-        }
-        if (typeof getProjectsQuery !== 'undefined' && typeof getProjectsQuery.run === 'function') {
-          await getProjectsQuery.run()
-        }
-        if (typeof getExcludedProjects !== 'undefined' && typeof getExcludedProjects.run === 'function') {
-          await getExcludedProjects.run()
-        }
+        // تشغيل استعلامات Appsmith فوراً لتحديث الواجهة والأرقام الإحصائية
+        await refreshAppsmithQueries()
         
         // إعادة بناء القواميس
         if (typeof ProjectManagerMapper?.buildMappingDictionary === 'function') {
@@ -155,13 +179,9 @@ export const ExcelImportPipeline = {
         if (typeof CacheManager?.clearAllCaches === 'function') {
           CacheManager.clearAllCaches()
         }
-        if (typeof getReportsQuery !== 'undefined' && typeof getReportsQuery.run === 'function') {
-          await getReportsQuery.run()
-        }
-        if (typeof getProjectsQuery !== 'undefined' && typeof getProjectsQuery.run === 'function') {
-          await getProjectsQuery.run()
-        }
-        safeShowAlert('✅ تم التراجع بنجاح', 'success')
+        await refreshAppsmithQueries()
+        safeStoreValue('lastUploadTime', new Date().toISOString())
+        safeShowAlert('✅ تم التراجع وتحديث الواجهة بنجاح', 'success')
         return result
       } else {
         safeShowAlert('❌ فشل التراجع: ' + result.error, 'error')

@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { calculateStats, createManagersData } from '../pipeline/buildData.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -333,6 +334,23 @@ class ImportPipeline {
       fs.writeFileSync(generatedReportsPath, JSON.stringify(merged, null, 2), 'utf8')
     }
 
+    // Update stats.json and managers.json so dashboard numbers and manager cards update immediately
+    const projectsPath = path.join(__dirname, '../../data/generated/projects.json')
+    if (fs.existsSync(projectsPath)) {
+      try {
+        const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'))
+        const updatedStats = calculateStats(merged, projects)
+        const updatedManagers = createManagersData(projects, merged)
+        const statsPath = path.join(__dirname, '../../data/generated/stats.json')
+        const managersPath = path.join(__dirname, '../../data/generated/managers.json')
+        fs.writeFileSync(statsPath, JSON.stringify(updatedStats, null, 2), 'utf8')
+        fs.writeFileSync(managersPath, JSON.stringify(updatedManagers, null, 2), 'utf8')
+      } catch (e) {
+        console.error('Error recalculating stats and managers in importPipeline:', e)
+      }
+    }
+
+    // تسجيل العملية
     const logPath = path.join(__dirname, '../../data/import_logs.json')
     const logs = fs.existsSync(logPath) ? JSON.parse(fs.readFileSync(logPath, 'utf8')) : []
     logs.push({

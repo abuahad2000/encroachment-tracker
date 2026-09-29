@@ -6,3 +6,6 @@ dist/
 .DS_Store
 Thumbs.db
 /server/data/generated/
+/server/data/reports.json
+/server/data/import_logs.json
+/server/data/backups/
