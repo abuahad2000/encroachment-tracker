@@ -1,3 +1,4 @@
+import MappingReview from './pages/MappingReview'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
