@@ -13,36 +13,73 @@ export async function buildData(customReportsFile = null) {
   console.log('🔄 جاري معالجة البيانات...')
 
   try {
-    // ✅ شبكة الأمان: تحديد المسار والتحقق من وجود الملف قبل المعالجة
+    // ✅ شبكة الأمان الذكية: تحديد المسار والتحقق من وجود الملف قبل المعالجة
     const defaultPath = path.join(__dirname, '../../../XLSX/بلاغات تعدي مقاولي شركة المياه الوطنية 12 سبتمبر.xlsx')
     const targetFile = customReportsFile || defaultPath
 
     if (!fs.existsSync(targetFile)) {
       console.warn(`⚠️ تحذير: ملف الإكسيل غير موجود في: ${targetFile}`)
-      console.log('🔄 جاري تهيئة ملفات بيانات فارغة مؤقتاً لضمان نجاح عملية البناء (Build)...')
-
+      
       const outputDir = path.join(__dirname, '../../data/generated')
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true })
       }
 
-      // محاولة قراءة المشاريع والطبقات إذا كانت موجودة محلياً في المستودع
-      let projects = []
-      let geoJsonData = { water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }
-      try { projects = parseProjects() } catch(e) {}
-      try { geoJsonData = await parseAllKMZ() } catch(e) {}
+      const reportsPath = path.join(outputDir, 'reports.json')
+      
+      // 🧠 الذكاء الجديد: التحقق من وجود بيانات محفوظة مسبقاً وعدم مسحها
+      if (fs.existsSync(reportsPath)) {
+        try {
+          const existingReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
+          if (existingReports && existingReports.length > 0) {
+            console.log('✅ تم العثور على بيانات موجودة مسبقاً، سيتم الاحتفاظ بها وعدم مسحها.')
+            
+            // إعادة حساب الإحصائيات والمدراء بناءً على البيانات الموجودة لضمان تحديث الواجهة
+            let projects = []
+            try {
+              const { parseProjects } = await import('./parseProjects.js')
+              projects = parseProjects()
+            } catch(e) {}
+            
+            const { processReports } = await import('./matchEngine.js')
+            const processedReports = processReports(existingReports, projects, { water: {features:[]}, sanitation: {features:[]}, governorates: {features:[]} }, [], { customContractors: [], aliases: {} })
+            
+            const stats = calculateStats(processedReports, projects)
+            const managers = createManagersData(projects, processedReports)
 
-      const emptyReports = []
-      const stats = calculateStats(emptyReports, projects)
-      const managers = createManagersData(projects, emptyReports)
+            fs.writeFileSync(reportsPath, JSON.stringify(processedReports, null, 2), 'utf-8')
+            fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
+            fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
+            
+            console.log('✅ تم الاحتفاظ بالبيانات وإعادة حساب الإحصائيات بنجاح.')
+            return { success: true, stats, message: 'تم استخدام البيانات الموجودة مسبقاً' }
+          }
+        } catch (e) {
+          console.warn('خطأ في قراءة البيانات الموجودة:', e.message)
+        }
+      }
 
-      fs.writeFileSync(path.join(outputDir, 'reports.json'), '[]', 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify(geoJsonData, null, 2), 'utf-8')
+      // محاولة القراءة من المسار الأصلي كبديل (إذا كان محفوظاً في المستودع)
+      const originalReportsPath = path.join(__dirname, '../../data/reports.json')
+      if (fs.existsSync(originalReportsPath)) {
+        try {
+          const originalData = JSON.parse(fs.readFileSync(originalReportsPath, 'utf-8'))
+          if (originalData && originalData.length > 0) {
+            fs.writeFileSync(reportsPath, JSON.stringify(originalData, null, 2), 'utf-8')
+            console.log('✅ تم نسخ البيانات من المسار الأصلي بنجاح.')
+            return { success: true, message: 'تم استخدام البيانات الأصلية' }
+          }
+        } catch (e) {}
+      }
 
-      console.log('✅ تم تهيئة البيانات بنجاح (وضع البناء). يمكن بدء التطبيق.')
+      // 🛑 الملاذ الأخير: فقط إذا لم يوجد أي شيء على الإطلاق، أنشئ ملفات فارغة لمنع انهيار الـ Build
+      console.log('🔄 لم يتم العثور على أي بيانات، جاري تهيئة ملفات فارغة مؤقتاً...')
+      fs.writeFileSync(reportsPath, '[]', 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'projects.json'), '[]', 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'stats.json'), '{}', 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'managers.json'), '[]', 'utf-8')
+      fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify({ water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }, null, 2), 'utf-8')
+
       return { success: true, stats: { totalReports: 0 }, message: 'تم التهيئة ببيانات فارغة' }
     }
 
@@ -209,7 +246,6 @@ export async function buildData(customReportsFile = null) {
   }
 }
 
-// ... (احتفظ بباقي الدوال calculateStats, normalizeManagerName, createManagersData, syncContractorDirectory كما هي في ملفك الأصلي) ...
 export function calculateStats(reports, projects) {
   const assigned = reports.filter(r => r.matched && r.project && !r.excluded)
   const pending = assigned.filter(r => r.status === 'تحت معالجة المقاول')
