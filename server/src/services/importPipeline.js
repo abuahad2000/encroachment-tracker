@@ -31,124 +31,13 @@ class ImportPipeline {
       data = this.stage3_normalize(data)
       this.completeStage()
 
-     // ===== المرحلة 4: الربط الدقيق مع نظام الثقة =====
-async stage4_map(data) {
-  const projectsPath = path.join(__dirname, '../../data/projects.json');
-  const projects = fs.existsSync(projectsPath) 
-    ? JSON.parse(fs.readFileSync(projectsPath, 'utf8')) 
-    : [];
-
-  let matched = 0;
-  let unmatched = 0;
-  let lowConfidence = 0;
-
-  const mappedData = data.map(row => {
-    let bestMatch = null;
-    let bestScore = 0;
-    let matchReason = '';
-
-    // ===== معايير الربط المشددة =====
-    projects.forEach(project => {
-      let score = 0;
-      let reasons = [];
-
-      // المعيار 1: تطابق اسم المشروع (40 نقطة)
-      if (row.projectName && project.name) {
-        const rowName = row.projectName.toLowerCase().trim();
-        const projName = project.name.toLowerCase().trim();
-        if (rowName === projName) {
-          score += 40;
-          reasons.push('تطابق تام في اسم المشروع');
-        } else if (rowName.includes(projName) || projName.includes(rowName)) {
-          score += 25;
-          reasons.push('تطابق جزئي في اسم المشروع');
-        }
-      }
-
-      // المعيار 2: تطابق رقم العملية (30 نقطة) - الأقوى
-      if (row.operationNumber && project.operationNumber) {
-        if (row.operationNumber === project.operationNumber) {
-          score += 30;
-          reasons.push('تطابق رقم العملية');
-        }
-      }
-
-      // المعيار 3: تطابق المقاول + الحي معاً (20 نقطة)
-      if (row.contractorName && row.district && project.contractor && project.scope) {
-        const contractorMatch = row.contractorName === project.contractor;
-        const districtMatch = project.scope.includes(row.district) || 
-                              project.name.includes(row.district);
-        if (contractorMatch && districtMatch) {
-          score += 20;
-          reasons.push('تطابق المقاول والحي');
-        } else if (contractorMatch) {
-          score += 8;
-          reasons.push('تطابق المقاول فقط');
-        }
-      }
-
-      // المعيار 4: تطابق القطاع (10 نقاط)
-      if (row.sector && project.sector) {
-        if (row.sector === project.sector) {
-          score += 10;
-          reasons.push('تطابق القطاع');
-        }
-      }
-
-      // حفظ أفضل تطابق
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = project;
-        matchReason = reasons.join(' + ');
-      }
-    });
-
-    // ===== قرار الربط بناءً على الثقة =====
-    if (bestScore >= 70) {
-      // ثقة عالية - ربط تلقائي
-      matched++;
-      return {
-        ...row,
-        project: bestMatch,
-        projectId: bestMatch.id,
-        programManager: bestMatch.programManager,
-        projectManager: bestMatch.projectManager,
-        contractor: bestMatch.contractor || row.contractorName,
-        matched: true,
-        confidence: 'high',
-        confidenceScore: bestScore,
-        matchReason
-      };
-    } else if (bestScore >= 40) {
-      // ثقة متوسطة - ربط مع علامة للمراجعة
-      lowConfidence++;
-      return {
-        ...row,
-        project: bestMatch,
-        projectId: bestMatch.id,
-        programManager: bestMatch.programManager,
-        matched: true,
-        confidence: 'medium',
-        confidenceScore: bestScore,
-        matchReason,
-        needsReview: true // ⚠️ علامة للمراجعة اليدوية
-      };
-    } else {
-      // ثقة منخفضة - عدم الربط
-      unmatched++;
-      return {
-        ...row,
-        matched: false,
-        confidence: 'low',
-        confidenceScore: bestScore,
-        needsManualReview: true,
-        suggestedProject: bestMatch ? bestMatch.name : null
-      };
-    }
-  });
-
-  return { data: mappedData, matched, unmatched, lowConfidence };
-}
+      // ===== المرحلة 4: الربط الدقيق مع نظام الثقة =====
+      this.addStage('Mapping', 'جاري الربط بالمشاريع...')
+      const mappingResult = await this.stage4_map(data)
+      data = mappingResult.data
+      audit.matched = mappingResult.matched
+      audit.unmatched = mappingResult.unmatched
+      this.completeStage()
 
       // ===== المرحلة 5: تطبيق قواعد الاستبعاد =====
       this.addStage('Exclusion', 'جاري تطبيق قواعد الاستبعاد...')
@@ -168,6 +57,7 @@ async stage4_map(data) {
         fileName: options.fileName
       }
     } catch (error) {
+      console.error('Pipeline Error:', error)
       return { success: false, error: error.message, stages: this.stages }
     }
   }
@@ -198,13 +88,14 @@ async stage4_map(data) {
         status: row.status || row['الحالة'] || 'تحت معالجة المقاول',
         latitude: parseFloat(row.latitude || row.lat || 0),
         longitude: parseFloat(row.longitude || row.lng || row.lon || 0),
-        ageDays: parseInt(row.ageDays || row['أيام التأخير'] || 0)
+        ageDays: parseInt(row.ageDays || row['أيام التأخير'] || 0),
+        projectName: row.projectName || row['اسم المشروع'] || '',
+        operationNumber: row.operationNumber || row['رقم العملية'] || '',
+        sector: row.sector || ''
       }))
       .filter(row => {
-        // التحقق من الإحداثيات
         if (row.latitude && (row.latitude < 15 || row.latitude > 30)) return false
         if (row.longitude && (row.longitude < 34 || row.longitude > 56)) return false
-        // منع التكرار
         const key = row.licenseNumber || `${row.district}-${row.contractorName}`
         if (seen.has(key)) return false
         seen.add(key)
@@ -215,7 +106,7 @@ async stage4_map(data) {
   // ===== المرحلة 2: التصنيف =====
   stage2_classify(data) {
     return data.map(row => {
-      const name = (row.projectName || row['اسم المشروع'] || row.description || '').toLowerCase()
+      const name = (row.projectName || row.description || '').toLowerCase()
       const status = (row.status || '').toLowerCase()
       
       let phase = 'capital'
@@ -265,7 +156,7 @@ async stage4_map(data) {
     })
   }
 
-  // ===== المرحلة 4: الربط الدقيق =====
+  // ===== المرحلة 4: الربط الدقيق مع نظام الثقة (النسخة المصححة والمدمجة) =====
   async stage4_map(data) {
     const directProjectsPath = path.join(__dirname, '../../data/projects.json')
     const generatedProjectsPath = path.join(__dirname, '../../data/generated/projects.json')
@@ -275,63 +166,111 @@ async stage4_map(data) {
       ? JSON.parse(fs.readFileSync(projectsPath, 'utf8')) 
       : []
 
-    // بناء قاموس المشاريع
-    const projectDict = {}
-    projects.forEach(p => {
-      const key = `${p.name}|${p.status || 'ongoing'}|${p.type || 'capital'}|${p.operationNumber || ''}`.toLowerCase()
-      projectDict[key] = p
-    })
-
     let matched = 0
     let unmatched = 0
+    let lowConfidence = 0
 
     const mappedData = data.map(row => {
-      let matchedProject = null
-      let confidence = 'low'
+      let bestMatch = null
+      let bestScore = 0
+      let matchReason = ''
 
-      // البحث بالمفتاح المركب
-      if (row.projectName) {
-        const key = `${row.projectName}|${row.phase}|capital|${row.operationNumber || ''}`.toLowerCase()
-        matchedProject = projectDict[key]
-        if (matchedProject) confidence = 'high'
-      }
+      projects.forEach(project => {
+        let score = 0
+        let reasons = []
 
-      // Fallback: البحث بالاسم الجزئي
-      if (!matchedProject && row.projectName) {
-        matchedProject = projects.find(p => 
-          p.name && (p.name.includes(row.projectName) || row.projectName.includes(p.name))
-        )
-        if (matchedProject) confidence = 'medium'
-      }
+        // المعيار 1: تطابق اسم المشروع (40 نقطة)
+        if (row.projectName && project.name) {
+          const rowName = row.projectName.toLowerCase().trim()
+          const projName = project.name.toLowerCase().trim()
+          if (rowName === projName) {
+            score += 40
+            reasons.push('تطابق تام في اسم المشروع')
+          } else if (rowName.includes(projName) || projName.includes(rowName)) {
+            score += 25
+            reasons.push('تطابق جزئي في اسم المشروع')
+          }
+        }
 
-      // Fallback: البحث بالمقاول + الحي
-      if (!matchedProject && row.contractorName && row.district) {
-        matchedProject = projects.find(p => 
-          p.contractor === row.contractorName && 
-          (p.scope?.includes(row.district) || p.name?.includes(row.district))
-        )
-        if (matchedProject) confidence = 'medium'
-      }
+        // المعيار 2: تطابق رقم العملية (30 نقطة) - الأقوى
+        if (row.operationNumber && project.operationNumber) {
+          if (row.operationNumber === project.operationNumber) {
+            score += 30
+            reasons.push('تطابق رقم العملية')
+          }
+        }
 
-      if (matchedProject) {
+        // المعيار 3: تطابق المقاول + الحي معاً (20 نقطة)
+        if (row.contractorName && row.district && project.contractor && project.scope) {
+          const contractorMatch = row.contractorName === project.contractor
+          const districtMatch = project.scope.includes(row.district) || project.name.includes(row.district)
+          if (contractorMatch && districtMatch) {
+            score += 20
+            reasons.push('تطابق المقاول والحي')
+          } else if (contractorMatch) {
+            score += 8
+            reasons.push('تطابق المقاول فقط')
+          }
+        }
+
+        // المعيار 4: تطابق القطاع (10 نقاط)
+        if (row.sector && project.sector) {
+          if (row.sector === project.sector) {
+            score += 10
+            reasons.push('تطابق القطاع')
+          }
+        }
+
+        if (score > bestScore) {
+          bestScore = score
+          bestMatch = project
+          matchReason = reasons.join(' + ')
+        }
+      })
+
+      // ===== قرار الربط بناءً على الثقة =====
+      if (bestScore >= 70) {
         matched++
         return {
           ...row,
-          project: matchedProject,
-          projectId: matchedProject.id,
-          programManager: matchedProject.programManager || row.programManager,
-          projectManager: matchedProject.projectManager,
-          contractor: matchedProject.contractor || row.contractorName,
+          project: bestMatch,
+          projectId: bestMatch.id,
+          programManager: bestMatch.programManager,
+          projectManager: bestMatch.projectManager,
+          contractor: bestMatch.contractor || row.contractorName,
           matched: true,
-          confidence
+          confidence: 'high',
+          confidenceScore: bestScore,
+          matchReason,
+          needsReview: false
+        }
+      } else if (bestScore >= 40) {
+        lowConfidence++
+        return {
+          ...row,
+          project: bestMatch,
+          projectId: bestMatch.id,
+          programManager: bestMatch ? bestMatch.programManager : row.programManager,
+          matched: true,
+          confidence: 'medium',
+          confidenceScore: bestScore,
+          matchReason,
+          needsReview: true // ⚠️ علامة للمراجعة اليدوية
+        }
+      } else {
+        unmatched++
+        return {
+          ...row,
+          matched: false,
+          confidence: 'low',
+          confidenceScore: bestScore,
+          matchReason: 'لا يوجد تطابق كافٍ',
+          needsReview: true // ⚠️ علامة للمراجعة اليدوية
         }
       }
-
-      unmatched++
-      return { ...row, matched: false, confidence: 'none', needsManualReview: true }
     })
 
-    return { data: mappedData, matched, unmatched }
+    return { data: mappedData, matched, unmatched, lowConfidence }
   }
 
   // ===== المرحلة 5: الاستبعاد =====
@@ -367,22 +306,18 @@ async stage4_map(data) {
       ? JSON.parse(fs.readFileSync(reportsPath, 'utf8')) 
       : []
 
-    // دمج البيانات الجديدة مع القديمة (تحديث حسب ID)
     const newIds = new Set(data.map(r => r.id).filter(Boolean))
     const merged = [
       ...existingReports.filter(r => !newIds.has(r.id)),
       ...data
     ]
 
-    // Save to primary reports.json
     fs.writeFileSync(directReportsPath, JSON.stringify(merged, null, 2), 'utf8')
 
-    // Also sync to generated/reports.json if exists
     if (fs.existsSync(path.dirname(generatedReportsPath))) {
       fs.writeFileSync(generatedReportsPath, JSON.stringify(merged, null, 2), 'utf8')
     }
 
-    // تسجيل العملية
     const logPath = path.join(__dirname, '../../data/import_logs.json')
     const logs = fs.existsSync(logPath) ? JSON.parse(fs.readFileSync(logPath, 'utf8')) : []
     logs.push({
