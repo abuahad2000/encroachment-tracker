@@ -6,6 +6,7 @@ import { parseProjects } from './parseProjects.js'
 import { parseAllKMZ } from './parseKmz.js'
 import { processReports } from './matchEngine.js'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
+import { buildDistrictsClassification } from './districtClassification.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -82,6 +83,8 @@ export async function buildData(customReportsFile = null) {
         fs.writeFileSync(reportsPath, '[]', 'utf-8')
       }
       fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2), 'utf-8')
+      const districtsClassification = buildDistrictsClassification(projects)
+      fs.writeFileSync(path.join(outputDir, 'districts_classification.json'), JSON.stringify(districtsClassification, null, 2), 'utf-8')
       fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
       fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
       fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify(geoJsonData, null, 2), 'utf-8')
@@ -177,6 +180,8 @@ export async function buildData(customReportsFile = null) {
 
     fs.writeFileSync(path.join(outputDir, 'reports.json'), JSON.stringify(processedReports, null, 2))
     fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2))
+    const districtsClassification = buildDistrictsClassification(projects)
+    fs.writeFileSync(path.join(outputDir, 'districts_classification.json'), JSON.stringify(districtsClassification, null, 2))
     fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2))
     fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2))
 

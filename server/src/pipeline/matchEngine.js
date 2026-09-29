@@ -265,7 +265,7 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
     }
   }
 
-  // قاعدة المقاول "الأعمال المدنية": إذا لم يتطابق الحي مع المشروع الجاري يجعله مستبعداً فوراً
+  // قاعدة المقاول "الأعمال المدنية": إذا لم يتطابق الحي مع المشروع الجاري يجعله مستبعداً فوراً للتشغيل والصيانة
   if (isCivilWorks) {
     const civilProj = activeProjects.find(p => p.id === '57' || p.id === 57 || matchContractor('شركة الأعمال المدنية', [p.contractor]))
     const districtMatches = report.district && civilProj && matchDistrict(report.district, civilProj.scope)
@@ -273,9 +273,9 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
       return {
         matched: false,
         excluded: true,
-        excludedReason: 'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)',
+        excludedReason: 'تابع لإدارة التشغيل والصيانة (خارج نطاق مشروع العوالي)',
         confidence: 0,
-        reason: 'civil_works_district_mismatch'
+        reason: 'civil_works_maintenance'
       }
     }
   }
@@ -489,9 +489,9 @@ export function matchReportToProject(report, activeProjects, contractorsConfig) 
     return {
       matched: false,
       excluded: true,
-      excludedReason: 'عدم تطابق الحي مع نطاق المشروع (أعمال مدنية/تشغيل وصيانة)',
+      excludedReason: 'تابع لإدارة التشغيل والصيانة (خارج نطاق مشروع العوالي)',
       confidence: 0,
-      reason: 'civil_works_district_mismatch'
+      reason: 'civil_works_maintenance'
     }
   }
 
@@ -724,11 +724,16 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.lockedContractor = true
     }
 
-    // If report was excluded, ensure project is strictly null
+    // If report was excluded, ensure project and programManager are strictly null
     if (result.excluded) {
       result.project = null
+      result.programManager = null
       result.matched = false
-      result.actionCategory = 'مستبعد'
+      if (result.excludedReason?.includes('تشغيل وصيانة') || result.excludedReason?.includes('الصيانة')) {
+        result.actionCategory = 'تشغيل وصيانة'
+      } else {
+        result.actionCategory = 'مستبعد'
+      }
     } else if (report.status === 'تحت معالجة المقاول') {
       result.actionCategory = 'تحت معالجة المقاول'
     } else if (report.status === 'تمت المعالجة') {

@@ -158,6 +158,47 @@ app.get('/api/projects', (req, res) => {
   res.json(projects)
 })
 
+// Get capital projects classified by districts (تصنيف المشاريع التابعة لإدارة المشاريع بأسماء الأحياء)
+app.get(['/api/projects/by-district', '/api/districts-classification'], async (req, res) => {
+  let classification = loadGeneratedData('districts_classification.json')
+  if (!classification) {
+    const projects = loadGeneratedData('projects.json')
+    if (projects) {
+      const { buildDistrictsClassification } = await import('./pipeline/districtClassification.js')
+      classification = buildDistrictsClassification(projects)
+      safeWriteJsonSync(path.join(__dirname, '../data/generated/districts_classification.json'), classification)
+    }
+  }
+
+  if (!classification) {
+    return res.status(500).json({ error: 'Districts classification not found.' })
+  }
+
+  const { district, manager, type } = req.query
+  let filtered = classification
+
+  if (district) {
+    const q = String(district).trim().toLowerCase()
+    filtered = filtered.filter(d => 
+      d.district.toLowerCase().includes(q) || 
+      d.normalizedDistrict.toLowerCase().includes(q)
+    )
+  }
+
+  if (manager) {
+    const m = String(manager).trim().toLowerCase()
+    filtered = filtered.filter(d => 
+      d.programManagers.some(pm => pm.toLowerCase().includes(m))
+    )
+  }
+
+  if (type) {
+    filtered = filtered.filter(d => d.type.includes(type))
+  }
+
+  res.json(filtered)
+})
+
 // Get excluded projects / reports (Appsmith API endpoint: getExcludedProjects)
 app.get(['/api/projects/excluded', '/api/reports/excluded'], (req, res) => {
   const reports = loadGeneratedData('reports.json')

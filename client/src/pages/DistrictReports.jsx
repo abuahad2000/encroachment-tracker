@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { DistrictAnalytics } from '../utils/DistrictAnalytics'
 import { CacheManager } from '../utils/CacheManager'
+import DistrictProjectsCatalog from '../components/DistrictProjectsCatalog'
 
 export default function DistrictReports() {
+  const [activeTab, setActiveTab] = useState('reports') // 'reports' | 'classification'
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -208,6 +210,37 @@ export default function DistrictReports() {
         </div>
       </div>
 
+      {/* شريط التبديل بين البلاغات ودليل تصنيف المشاريع بالأحياء */}
+      <div className="flex items-center gap-3 bg-gray-100 dark:bg-slate-900 p-1.5 rounded-2xl border border-gray-200 dark:border-slate-800">
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition ${
+            activeTab === 'reports'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <span>🏘️</span>
+          <span>استعراض وتدقيق بلاغات الأحياء ({filteredReports.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('classification')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition ${
+            activeTab === 'classification'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <span>📋</span>
+          <span>دليل تصنيف مشاريع إدارة المشاريع بالأحياء المعتمدة (48 حي ومحافظة)</span>
+        </button>
+      </div>
+
+      {activeTab === 'classification' ? (
+        <DistrictProjectsCatalog />
+      ) : (
+        <>
       {/* لوحة الفلاتر (GovernorateSelect & DistrictSelect) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-gray-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -741,6 +774,8 @@ export default function DistrictReports() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

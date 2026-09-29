@@ -290,17 +290,34 @@ class ImportPipeline {
           const contractorMatch = rCont === pCont || rCont.includes(pCont) || pCont.includes(rCont)
           const districtMatch = row.district && project.scope && (project.scope.includes(row.district) || project.name?.includes(row.district))
 
-          if (contractorMatch && districtMatch) {
+          // فحص خاص لشركة الأعمال المدنية والمقاولين المشتركين مع الصيانة:
+          const isCivilWorks = rCont.includes('اعمال مدنية') || rCont.includes('الاعمال المدنيه') || rCont.includes('أعمال مدنية')
+          const isSpecificProject = project.scope && !project.scope.includes('شامل')
+
+          if (isCivilWorks) {
+            // شركة الأعمال المدنية لا ترتبط بالمشاريع إلا إذا كان البلاغ بحي العوالي حصراً!
+            if (row.district && (row.district.includes('العوالي') || project.scope?.includes('العوالي')) && (project.id === '57' || String(project.id) === '57')) {
+              score += 65
+              reasons.push('تطابق مشروع الأعمال المدنية بحي العوالي (م. أمجد الفالح)')
+            } else {
+              // خارج العوالي لا يحصل على أي نقاط ويعتبر تشغيل وصيانة!
+              score = -100
+              reasons.push('خارج نطاق العوالي - تابع للتشغيل والصيانة')
+            }
+          } else if (contractorMatch && districtMatch) {
             score += 45
             reasons.push('تطابق المقاول والحي')
           } else if (contractorMatch) {
-            const contractorInfo = contractorManagerCount[project.contractor.trim()]
-            if (contractorInfo && contractorInfo.isUnique) {
-              score += 35
-              reasons.push('تطابق المقاول (فريد لمدير واحد)')
-            } else {
-              score += 20
-              reasons.push('تطابق المقاول')
+            // إذا كان المشروع له نطاق حي محدد والبلاغ في حي مختلف، لا نمنح نقاط تفرد المقاول لمنع الخلط بين الصيانة والمشاريع
+            if (!isSpecificProject) {
+              const contractorInfo = contractorManagerCount[project.contractor.trim()]
+              if (contractorInfo && contractorInfo.isUnique) {
+                score += 35
+                reasons.push('تطابق المقاول (عقد شامل فريد لمدير واحد)')
+              } else {
+                score += 20
+                reasons.push('تطابق المقاول')
+              }
             }
           }
         }
@@ -356,9 +373,27 @@ class ImportPipeline {
   // ===== المرحلة 5: الاستبعاد =====
   stage5_exclude(data) {
     return data.map(row => {
+      // ⚠️ فحص خاص لمقاول الأعمال المدنية: إذا لم يكن بحي العوالي يعتبر تشغيل وصيانة فوراً
+      const cName = (row.contractorName || row.contractor || '').toLowerCase()
+      const isCivil = cName.includes('اعمال مدنية') || cName.includes('الاعمال المدنيه') || cName.includes('أعمال مدنية')
+      if (isCivil) {
+        const isAwal = row.district && row.district.includes('العوالي')
+        if (!isAwal) {
+          return {
+            ...row,
+            project: null,
+            projectId: null,
+            programManager: null,
+            matched: false,
+            excluded: true,
+            excludedReason: 'تابع لإدارة التشغيل والصيانة (خارج نطاق مشروع العوالي)',
+            actionCategory: 'تشغيل وصيانة'
+          }
+        }
+      }
+
       // ⚠️ حماية شركة العرين - لا تستبعدها أبداً
-      const contractor = (row.contractorName || row.contractor || '').toLowerCase()
-      if (contractor.includes('العرين')) {
+      if (cName.includes('العرين')) {
         return { ...row, excluded: false, protectedByRule: 'Al-Areen protection' }
       }
 
@@ -367,14 +402,27 @@ class ImportPipeline {
         return { ...row, excluded: true, excludedReason: 'تمت المعالجة' }
       }
 
-      // البلاغات المرتبطة بمشروع لا تُستبعد
+      // البلاغات المرتبطة بمشروع رأسمالي جاري لا تُستبعد وتأخذ اسم مدير البرنامج
       if (row.matched && row.project) {
-        return { ...row, excluded: false }
+        return {
+          ...row,
+          programManager: row.project.programManager,
+          excluded: false,
+          actionCategory: row.status === 'تحت معالجة المقاول' ? 'تحت معالجة المقاول' : (row.status === 'تمت المعالجة' ? 'تمت المعالجة' : 'تحت الإجراء')
+        }
       }
 
-      // استبعاد غير المرتبط
+      // استبعاد غير المرتبط واعتباره تابعاً للتشغيل والصيانة
       if (!row.matched && !row.project) {
-        return { ...row, excluded: true, excludedReason: 'غير مرتبط بمشروع رأسمالي' }
+        return {
+          ...row,
+          project: null,
+          programManager: null,
+          matched: false,
+          excluded: true,
+          excludedReason: 'تابع للتشغيل والصيانة (خارج نطاق مشاريع إدارة المشاريع)',
+          actionCategory: 'تشغيل وصيانة'
+        }
       }
 
       return row

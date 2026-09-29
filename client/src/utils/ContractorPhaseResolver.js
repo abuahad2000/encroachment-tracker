@@ -111,26 +111,59 @@ export const ContractorPhaseResolver = {
 
       // Priority 1: Capital ongoing
       if (contractorData.capital.length > 0) {
-        const district = (report.district || '').trim()
-        const matchedScope = contractorData.capital.find(p => district && ((p.scope || '') + ' ' + (p.name || '')).includes(district))
-        const selected = matchedScope || contractorData.capital[0]
+        const district = (report.district || '').trim().replace(/^حي\s+/, '')
+        // فحص التطابق مع نطاق المشروع الجغرافي
+        const matchedScope = district 
+          ? contractorData.capital.find(p => {
+              const scopeText = ((p.scope || '') + ' ' + (p.name || '')).replace(/^حي\s+/, '')
+              return scopeText.includes(district) || district.includes(p.scope?.replace(/^حي\s+/, ''))
+            })
+          : null
+        
+        // العقود الشاملة المعتمدة بالرياض (التي تغطي كامل المدينة)
+        const cityWideProj = contractorData.capital.find(p => (p.scope || '').includes('شامل'))
+
+        if (matchedScope) {
+          return {
+            programManager: matchedScope.programManager,
+            projectId: matchedScope.id,
+            phase: 'capital',
+            confidence: 'high',
+            note: 'مرتبط بمشروع رأسمالي جاري (تطابق الحي والنطاق)'
+          }
+        } else if (cityWideProj) {
+          return {
+            programManager: cityWideProj.programManager,
+            projectId: cityWideProj.id,
+            phase: 'capital',
+            confidence: 'medium',
+            note: 'مرتبط بعقد متفرقات شامل لمدينة الرياض'
+          }
+        }
+
+        // إذا كان المقاول مشتركاً والبلاغ في حي خارج نطاق مشروعه الرأسمالي (مثل الأعمال المدنية خارج العوالي):
+        // يعتبر قطعاً تابعاً للتشغيل والصيانة ولا يُسند لمدير البرنامج الرأسمالي!
         return {
-          programManager: selected.programManager,
-          projectId: selected.id,
-          phase: 'capital',
-          confidence: matchedScope ? 'high' : 'medium',
-          note: 'مرتبط بمشروع رأسمالي جاري (أولوية)'
+          programManager: null,
+          projectId: null,
+          phase: 'maintenance',
+          excluded: true,
+          excludedReason: 'خارج نطاق المشروع الجغرافي (تابع لإدارة التشغيل والصيانة)',
+          confidence: 'high',
+          note: 'مقاول مشترك: البلاغ خارج نطاق المشروع الرأسمالي ويعتبر تابعاً للتشغيل والصيانة'
         }
       }
 
       // Priority 2: Maintenance / Handover
       if (contractorData.maintenance.length > 0) {
         return {
-          programManager: contractorData.maintenance[0].programManager,
+          programManager: null, // لا يُسند لمدير برنامج المشاريع الرأسمالية حتى لا يخلط الإحصائيات
           projectId: contractorData.maintenance[0].id,
           phase: 'maintenance',
-          confidence: 'medium',
-          note: 'مرتبط بعقد صيانة / تسليم ابتدائي'
+          excluded: true,
+          excludedReason: 'تابع لعقد تشغيل وصيانة / تسليم ابتدائي',
+          confidence: 'high',
+          note: 'مرتبط بعقد صيانة / تسليم ابتدائي (مستبعد من إحصائيات المشاريع)'
         }
       }
     }
