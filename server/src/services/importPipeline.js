@@ -16,22 +16,18 @@ class ImportPipeline {
     const audit = { total: data.length, matched: 0, unmatched: 0, issues: [] }
 
     try {
-      // ===== المرحلة 1: التنظيف =====
       this.addStage('Cleaning', 'جاري تنظيف البيانات...')
       data = this.stage1_clean(data)
       this.completeStage()
 
-      // ===== المرحلة 2: التصنيف =====
       this.addStage('Classification', 'جاري تصنيف المشاريع...')
       data = this.stage2_classify(data)
       this.completeStage()
 
-      // ===== المرحلة 3: توحيد الأسماء =====
       this.addStage('Normalization', 'جاري توحيد أسماء المدراء...')
       data = this.stage3_normalize(data)
       this.completeStage()
 
-      // ===== المرحلة 4: الربط الدقيق مع نظام الثقة =====
       this.addStage('Mapping', 'جاري الربط بالمشاريع...')
       const mappingResult = await this.stage4_map(data)
       data = mappingResult.data
@@ -39,12 +35,10 @@ class ImportPipeline {
       audit.unmatched = mappingResult.unmatched
       this.completeStage()
 
-      // ===== المرحلة 5: تطبيق قواعد الاستبعاد =====
       this.addStage('Exclusion', 'جاري تطبيق قواعد الاستبعاد...')
       data = this.stage5_exclude(data)
       this.completeStage()
 
-      // ===== المرحلة 6: التحقق والحفظ =====
       this.addStage('Validation', 'جاري التحقق والحفظ...')
       audit.accuracy = ((audit.matched / (audit.matched + audit.unmatched || 1)) * 100).toFixed(1)
       await this.stage6_save(data, options)
@@ -73,7 +67,6 @@ class ImportPipeline {
     }
   }
 
-  // ===== المرحلة 1: التنظيف =====
   stage1_clean(data) {
     const seen = new Set()
     return data
@@ -103,7 +96,6 @@ class ImportPipeline {
       })
   }
 
-  // ===== المرحلة 2: التصنيف =====
   stage2_classify(data) {
     return data.map(row => {
       const name = (row.projectName || row.description || '').toLowerCase()
@@ -127,7 +119,6 @@ class ImportPipeline {
     })
   }
 
-  // ===== المرحلة 3: توحيد الأسماء =====
   stage3_normalize(data) {
     const nameMap = {
       'عسكر لسوم': 'عسكر لسلوم',
@@ -156,7 +147,7 @@ class ImportPipeline {
     })
   }
 
-  // ===== المرحلة 4: الربط الدقيق مع نظام الثقة (النسخة المصححة والمدمجة) =====
+  // ===== المرحلة 4: الربط الدقيق مع التحقق من تفرد المقاول (النسخة الصحيحة) =====
   async stage4_map(data) {
     const directProjectsPath = path.join(__dirname, '../../data/projects.json')
     const generatedProjectsPath = path.join(__dirname, '../../data/generated/projects.json')
@@ -165,6 +156,26 @@ class ImportPipeline {
     const projects = fs.existsSync(projectsPath) 
       ? JSON.parse(fs.readFileSync(projectsPath, 'utf8')) 
       : []
+
+    // 1. بناء خريطة تفرد المقاولين (هل يعمل المقاول تحت مدير واحد أم عدة مدراء؟)
+    const contractorManagers = {}
+    projects.forEach(p => {
+      if (!p.contractor || p.contractor === '-') return
+      const contractor = p.contractor.trim()
+      if (!contractorManagers[contractor]) {
+        contractorManagers[contractor] = new Set()
+      }
+      contractorManagers[contractor].add(p.programManager)
+    })
+
+    const contractorManagerCount = {}
+    Object.entries(contractorManagers).forEach(([contractor, managers]) => {
+      contractorManagerCount[contractor] = {
+        count: managers.size,
+        managers: Array.from(managers),
+        isUnique: managers.size === 1 // true إذا كان المقاول يعمل تحت مدير واحد فقط
+      }
+    })
 
     let matched = 0
     let unmatched = 0
@@ -192,31 +203,39 @@ class ImportPipeline {
           }
         }
 
-        // المعيار 2: تطابق رقم العملية (30 نقطة) - الأقوى
+        // المعيار 2: تطابق رقم العملية (35 نقطة) - معيار حاسم
         if (row.operationNumber && project.operationNumber) {
           if (row.operationNumber === project.operationNumber) {
-            score += 30
+            score += 35
             reasons.push('تطابق رقم العملية')
           }
         }
 
-        // المعيار 3: تطابق المقاول + الحي معاً (20 نقطة)
+        // المعيار 3: تطابق المقاول والحي
         if (row.contractorName && row.district && project.contractor && project.scope) {
-          const contractorMatch = row.contractorName === project.contractor
+          const contractorMatch = row.contractorName.trim() === project.contractor.trim()
           const districtMatch = project.scope.includes(row.district) || project.name.includes(row.district)
+          
           if (contractorMatch && districtMatch) {
-            score += 20
+            score += 25
             reasons.push('تطابق المقاول والحي')
-          } else if (contractorMatch) {
-            score += 8
-            reasons.push('تطابق المقاول فقط')
+          } else if (contractorMatch && !districtMatch) {
+            // ⚠️ هنا يكمن الحل: التحقق من تفرد المقاول
+            const contractorInfo = contractorManagerCount[row.contractorName]
+            if (contractorInfo && contractorInfo.isUnique) {
+              score += 15 // المقاول فريد، الربط آمن
+              reasons.push('تطابق المقاول (فريد لمدير واحد)')
+            } else {
+              score += 5 // المقاول متداخل، نقاط قليلة جداً لمنع الربط الخاطئ
+              reasons.push('تطابق المقاول فقط (متداخل - يحتاج تحقق يدوي)')
+            }
           }
         }
 
-        // المعيار 4: تطابق القطاع (10 نقاط)
+        // المعيار 4: تطابق القطاع (5 نقاط)
         if (row.sector && project.sector) {
           if (row.sector === project.sector) {
-            score += 10
+            score += 5
             reasons.push('تطابق القطاع')
           }
         }
@@ -244,7 +263,7 @@ class ImportPipeline {
           matchReason,
           needsReview: false
         }
-      } else if (bestScore >= 40) {
+      } else if (bestScore >= 45) {
         lowConfidence++
         return {
           ...row,
@@ -255,7 +274,7 @@ class ImportPipeline {
           confidence: 'medium',
           confidenceScore: bestScore,
           matchReason,
-          needsReview: true // ⚠️ علامة للمراجعة اليدوية
+          needsReview: true // سيظهر في صفحة المراجعة
         }
       } else {
         unmatched++
@@ -264,8 +283,9 @@ class ImportPipeline {
           matched: false,
           confidence: 'low',
           confidenceScore: bestScore,
-          matchReason: 'لا يوجد تطابق كافٍ',
-          needsReview: true // ⚠️ علامة للمراجعة اليدوية
+          matchReason: matchReason || 'لا يوجد تطابق كافٍ',
+          needsReview: true,
+          suggestedProject: bestMatch ? bestMatch.name : null
         }
       }
     })
@@ -273,21 +293,17 @@ class ImportPipeline {
     return { data: mappedData, matched, unmatched, lowConfidence }
   }
 
-  // ===== المرحلة 5: الاستبعاد =====
   stage5_exclude(data) {
     return data.map(row => {
-      // ⚠️ حماية شركة العرين - لا تستبعدها أبداً
       const contractor = (row.contractorName || row.contractor || '').toLowerCase()
       if (contractor.includes('العرين')) {
         return { ...row, excluded: false, protectedByRule: 'Al-Areen protection' }
       }
 
-      // استبعاد المعالجة
       if (row.status === 'تمت المعالجة') {
         return { ...row, excluded: true, excludedReason: 'تمت المعالجة' }
       }
 
-      // استبعاد غير المرتبط
       if (!row.matched && !row.project) {
         return { ...row, excluded: true, excludedReason: 'غير مرتبط بمشروع رأسمالي' }
       }
@@ -296,7 +312,6 @@ class ImportPipeline {
     })
   }
 
-  // ===== المرحلة 6: الحفظ =====
   async stage6_save(data, options) {
     const directReportsPath = path.join(__dirname, '../../data/reports.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
