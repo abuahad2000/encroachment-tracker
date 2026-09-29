@@ -125,6 +125,7 @@ export function buildDistrictsClassification(projects) {
   const districtMap = {}
 
   projects.forEach(p => {
+    if (p.status === 'مسحوب') return
     const scope = p.scope || ''
     if (!scope || scope.includes('شامل')) return
 

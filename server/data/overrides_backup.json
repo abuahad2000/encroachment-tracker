@@ -1,22 +1,5 @@
 [
   {
-    "reportId": "1",
-    "licenseNumber": "",
-    "latitude": 24.5336647033691,
-    "longitude": 46.64892578125,
-    "district": "الحزم",
-    "excluded": false,
-    "reason": "مستبعد من نطاق مشاريع مدير البرنامج",
-    "projectId": "10",
-    "project": null,
-    "customContractor": "NULL",
-    "customSector": "مياه",
-    "isLocked": true,
-    "timestamp": "2026-09-28T17:43:42.135Z",
-    "customProgramManager": "عسكر لسلوم",
-    "assignedBy": "Appsmith Tester"
-  },
-  {
     "reportId": 22,
     "licenseNumber": "",
     "latitude": 24.7747993469238,
@@ -249,34 +232,6 @@
     "customSector": "صرف",
     "isLocked": true,
     "timestamp": "2026-09-21T19:30:26.921Z"
-  },
-  {
-    "reportId": 2875,
-    "projectId": "18",
-    "reason": "تعديل وتثبيت المقاول ومدير البرنامج والمشروع والقطاع",
-    "customContractor": "شركة الفهد للتجارة والصناعة والمقاولات",
-    "customProgramManager": "عسكر لسلوم",
-    "customSector": "صرف",
-    "licenseNumber": "NULL",
-    "latitude": 24.853401184082,
-    "longitude": 46.6796455383301,
-    "district": "النرجس",
-    "isLocked": true,
-    "timestamp": "2026-09-29T16:19:47.620Z"
-  },
-  {
-    "reportId": 2925,
-    "projectId": "18",
-    "reason": "تعديل وتثبيت المقاول ومدير البرنامج والمشروع والقطاع",
-    "customContractor": "شركة الفهد للتجارة والصناعة والمقاولات",
-    "customProgramManager": "عسكر لسلوم",
-    "customSector": "صرف",
-    "licenseNumber": "NULL",
-    "latitude": 24.8536510467529,
-    "longitude": 46.6793403625488,
-    "district": "النرجس",
-    "isLocked": true,
-    "timestamp": "2026-09-29T16:23:17.684Z"
   },
   {
     "reportId": 4123,
