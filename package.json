@@ -10,7 +10,7 @@
     "export-excel": "python scripts/export_executive_excel.py",
     "preview": "vite preview",
     "start": "node server/src/index.js",
-    "railway-build": "npm install && npm run build-data && npm run build"
+    "railway-build": "npm install && npm run build"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.13.2",
