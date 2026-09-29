@@ -641,6 +641,101 @@ app.post('/api/reports/assign', async (req, res) => {
   })
 })
 
+// ===== Unassign Project Endpoint (إضافة جديدة) =====
+app.post('/api/unassign-project', async (req, res) => {
+  try {
+    const { reportId, managerName } = req.body
+
+    if (!reportId || !managerName) {
+      return res.status(400).json({ error: 'الحقول reportId و managerName مطلوبة' })
+    }
+
+    const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
+    const reportsPath = path.join(__dirname, '../data/generated/reports.json')
+    const overridesPath = path.join(__dirname, '../data/overrides.json')
+    const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+
+    if (!fs.existsSync(reportsPath)) {
+      return res.status(404).json({ error: 'ملف التقارير غير موجود' })
+    }
+
+    const reports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
+    const rIdx = reports.findIndex(r => normalizeId(r.id) === normalizeId(reportId))
+
+    if (rIdx === -1) {
+      return res.status(404).json({ error: 'البلاغ غير موجود' })
+    }
+
+    // تحديث الحالة: استبعاد مع تسجيل السبب
+    reports[rIdx].excluded = true
+    reports[rIdx].excludedReason = `إزالة بواسطة مدير البرنامج (${managerName}): غير تابع للمشاريع`
+    reports[rIdx].matched = false
+    reports[rIdx].project = null
+    reports[rIdx].programManager = null
+    reports[rIdx].projectId = null
+    reports[rIdx].unassignedByManager = true
+    reports[rIdx].needsReview = true
+    reports[rIdx].actionCategory = 'مستبعد'
+
+    safeWriteJsonSync(reportsPath, reports)
+
+    // حفظ override للتتبع الدائم
+    try {
+      let overrides = []
+      if (fs.existsSync(overridesPath)) {
+        try { overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8')) || [] } catch (e) {}
+      }
+      const oIdx = overrides.findIndex(o => normalizeId(o.reportId) === normalizeId(reportId))
+      const overrideEntry = {
+        reportId: normalizeId(reportId),
+        excluded: true,
+        isLocked: false,
+        customProgramManager: null,
+        projectId: null,
+        unassignedByManager: true,
+        managerName,
+        reason: `إزالة بواسطة مدير البرنامج: غير تابع للمشاريع`,
+        timestamp: new Date().toISOString()
+      }
+      if (oIdx >= 0) {
+        overrides[oIdx] = { ...overrides[oIdx], ...overrideEntry }
+      } else {
+        overrides.push(overrideEntry)
+      }
+      safeWriteJsonSync(overridesPath, overrides)
+      safeWriteJsonSync(overridesBackupPath, overrides)
+    } catch (e) {
+      console.warn('Error saving unassign override:', e.message)
+    }
+
+    // إعادة حساب الإحصائيات
+    try {
+      const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+      if (fs.existsSync(projectsPath)) {
+        const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8'))
+        const updatedStats = calculateStats(reports, projects)
+        const updatedManagers = createManagersData(projects, reports)
+        safeWriteJsonSync(path.join(__dirname, '../data/generated/stats.json'), updatedStats)
+        safeWriteJsonSync(path.join(__dirname, '../data/generated/managers.json'), updatedManagers)
+      }
+    } catch (e) {
+      console.warn('Error recomputing stats:', e.message)
+    }
+
+    // تحديث تقرير Excel في الخلفية
+    runExecutiveExcelExport().catch(e => console.warn('Background Excel export warning:', e.message))
+
+    res.json({
+      success: true,
+      message: `تم إزالة المشروع من قائمة ${managerName} بنجاح`,
+      reportId
+    })
+  } catch (error) {
+    console.error('Unassign error:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Refresh data
 app.post('/api/refresh-data', async (req, res) => {
   try {
