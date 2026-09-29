@@ -8,11 +8,11 @@
     "activeProjects": 4,
     "deliveredProjects": 6,
     "totalProjects": 10,
-    "pendingReportsCount": 8,
-    "inProgressReportsCount": 1,
-    "processedReportsCount": 4,
-    "activeReports": 8,
-    "totalReportsCount": 13,
+    "pendingReportsCount": 9,
+    "inProgressReportsCount": 5,
+    "processedReportsCount": 26,
+    "activeReports": 9,
+    "totalReportsCount": 40,
     "phone": "509997997",
     "email": "amalenazi@nwc.com.sa",
     "projects": [
@@ -98,10 +98,10 @@
     "deliveredProjects": 5,
     "totalProjects": 22,
     "pendingReportsCount": 8,
-    "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
+    "inProgressReportsCount": 1,
+    "processedReportsCount": 12,
     "activeReports": 8,
-    "totalReportsCount": 8,
+    "totalReportsCount": 21,
     "phone": "598991815",
     "email": "salharth@nwc.com.sa",
     "projects": [
@@ -270,11 +270,11 @@
     "activeProjects": 6,
     "deliveredProjects": 2,
     "totalProjects": 8,
-    "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
-    "activeReports": 0,
-    "totalReportsCount": 0,
+    "pendingReportsCount": 5,
+    "inProgressReportsCount": 3,
+    "processedReportsCount": 24,
+    "activeReports": 5,
+    "totalReportsCount": 32,
     "phone": "582877792",
     "email": "tdalasmri@nwc.com.sa",
     "projects": [
@@ -345,11 +345,11 @@
     "activeProjects": 7,
     "deliveredProjects": 4,
     "totalProjects": 14,
-    "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
-    "activeReports": 0,
-    "totalReportsCount": 0,
+    "pendingReportsCount": 4,
+    "inProgressReportsCount": 15,
+    "processedReportsCount": 25,
+    "activeReports": 4,
+    "totalReportsCount": 44,
     "phone": "567448829",
     "email": "llslum@nwc.com.sa",
     "projects": [
@@ -454,6 +454,74 @@
     ]
   },
   {
+    "id": "amjad-alfaleh",
+    "slug": "amjad-alfaleh",
+    "name": "أمجد الفالح",
+    "scope": "غرب الرياض - صرف",
+    "subProgram": "غرب الرياض - صرف",
+    "activeProjects": 4,
+    "deliveredProjects": 1,
+    "totalProjects": 7,
+    "pendingReportsCount": 3,
+    "inProgressReportsCount": 9,
+    "processedReportsCount": 31,
+    "activeReports": 3,
+    "totalReportsCount": 43,
+    "phone": "555390254",
+    "email": "aalfaleh@nwc.com.sa",
+    "projects": [
+      {
+        "id": "52",
+        "name": "عقد تنفيذ شبكات صرف صحي بحي عرقة - عقد رقم 3",
+        "scope": "حي عرقة",
+        "status": "مسحوب",
+        "contractor": "شركة صلت للمقاولات"
+      },
+      {
+        "id": "55",
+        "name": "عقد تنفيذ شبكات الصرف الصحي بأجزاء من حي ظهرة لبن (عقد رقم 7)",
+        "scope": "حي ظهرة لبن",
+        "status": "مسحوب",
+        "contractor": "شركة ربوة التعمير(راكو) للمقاولات"
+      },
+      {
+        "id": "53",
+        "name": "عقد تنفيذ شبكات صرف صحي بأجزاء من حي طويق عقد رقم 8",
+        "scope": "حي طويق",
+        "status": "جاري",
+        "contractor": "الشركة الوطنية لأعمال المياه"
+      },
+      {
+        "id": "54",
+        "name": "عقد تنفيذ شبكات صرف صحي بأجزاء من حي طويق عقد رقم 7",
+        "scope": "حي طويق",
+        "status": "جاري",
+        "contractor": "شركة نظم تقنية المياه للمقاولات"
+      },
+      {
+        "id": "58",
+        "name": "عقد تنفيذ شبكات الصرف الصحي بحي العوالي - مرحلة ثانية",
+        "scope": "حي العوالي",
+        "status": "جاري",
+        "contractor": "شركة نظم البيئة للمقاولات"
+      },
+      {
+        "id": "56",
+        "name": "عقد تنفيذ خطوط صرف صحي رئيسية بحي المهدية (المرحلة الاولي)",
+        "scope": "حي المهدية",
+        "status": "مسلم ابتدائي",
+        "contractor": "شركة نظم البيئة للمقاولات"
+      },
+      {
+        "id": "57",
+        "name": "عقد تنفيذ شبكات الصرف الصحي بحي العوالي (مرحلة أولى)",
+        "scope": "حي العوالي",
+        "status": "جاري",
+        "contractor": "شركة الأعمال المدنية المحدودة"
+      }
+    ]
+  },
+  {
     "id": "abdullah-alenezi",
     "slug": "abdullah-alenezi",
     "name": "عبدالله علي العنزي",
@@ -462,11 +530,11 @@
     "activeProjects": 4,
     "deliveredProjects": 4,
     "totalProjects": 9,
-    "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
+    "pendingReportsCount": 1,
+    "inProgressReportsCount": 1,
     "processedReportsCount": 0,
-    "activeReports": 0,
-    "totalReportsCount": 0,
+    "activeReports": 1,
+    "totalReportsCount": 2,
     "phone": "555197474",
     "email": "aaenazi@nwc.com.sa",
     "projects": [
@@ -536,60 +604,6 @@
     ]
   },
   {
-    "id": "fahad-alenezi",
-    "slug": "fahad-alenezi",
-    "name": "فهد العنزي",
-    "scope": "المحافظات الشمالية",
-    "subProgram": "المحافظات الشمالية",
-    "activeProjects": 4,
-    "deliveredProjects": 1,
-    "totalProjects": 5,
-    "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
-    "activeReports": 0,
-    "totalReportsCount": 0,
-    "phone": "555278400",
-    "email": "fhalenazi@nwc.com.sa",
-    "projects": [
-      {
-        "id": "71",
-        "name": "عقد استكمال تنفيذ مشاريع المياه بمحافظة رماح (المرحلة الأولى)",
-        "scope": "محافظة رماح",
-        "status": "جاري",
-        "contractor": "شركة قلاع الانشاء للمقاولات المحدودة"
-      },
-      {
-        "id": "76",
-        "name": "عقد استكمال مشاريع المياه بمحافظة حريملاء",
-        "scope": "محافظة حريملاء",
-        "status": "جاري",
-        "contractor": "شركة دقة الابعاد للمقاولات"
-      },
-      {
-        "id": "77",
-        "name": "عقد استكمال مشاريع المياه بالمحافظات الشمالية",
-        "scope": "شامل",
-        "status": "جاري",
-        "contractor": "شركه اعمال المحترفون للتجارة والمقاولات"
-      },
-      {
-        "id": "82",
-        "name": "استبدال شبكات المياه بمحافظة رماح",
-        "scope": "محافظة رماح",
-        "status": "مسلم ابتدائي",
-        "contractor": "شركة قلاع الانشاء للمقاولات المحدودة"
-      },
-      {
-        "id": "85",
-        "name": "احلال وتجديد شبكات المياه بمحافظات  الدرعية وحريملاء",
-        "scope": "محافظة الدرعية و محافظة حريملاء",
-        "status": "جاري",
-        "contractor": "شركة ماكسون للمقاولات"
-      }
-    ]
-  },
-  {
     "id": "safar-alotaibi",
     "slug": "safar-alotaibi",
     "name": "سفر العتيبي",
@@ -599,10 +613,10 @@
     "deliveredProjects": 11,
     "totalProjects": 12,
     "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
+    "inProgressReportsCount": 1,
     "processedReportsCount": 0,
     "activeReports": 0,
-    "totalReportsCount": 0,
+    "totalReportsCount": 1,
     "phone": "503419469",
     "email": "sfrnalotaibi@nwc.com.sa",
     "projects": [
@@ -693,6 +707,60 @@
     ]
   },
   {
+    "id": "fahad-alenezi",
+    "slug": "fahad-alenezi",
+    "name": "فهد العنزي",
+    "scope": "المحافظات الشمالية",
+    "subProgram": "المحافظات الشمالية",
+    "activeProjects": 4,
+    "deliveredProjects": 1,
+    "totalProjects": 5,
+    "pendingReportsCount": 0,
+    "inProgressReportsCount": 0,
+    "processedReportsCount": 1,
+    "activeReports": 0,
+    "totalReportsCount": 1,
+    "phone": "555278400",
+    "email": "fhalenazi@nwc.com.sa",
+    "projects": [
+      {
+        "id": "71",
+        "name": "عقد استكمال تنفيذ مشاريع المياه بمحافظة رماح (المرحلة الأولى)",
+        "scope": "محافظة رماح",
+        "status": "جاري",
+        "contractor": "شركة قلاع الانشاء للمقاولات المحدودة"
+      },
+      {
+        "id": "76",
+        "name": "عقد استكمال مشاريع المياه بمحافظة حريملاء",
+        "scope": "محافظة حريملاء",
+        "status": "جاري",
+        "contractor": "شركة دقة الابعاد للمقاولات"
+      },
+      {
+        "id": "77",
+        "name": "عقد استكمال مشاريع المياه بالمحافظات الشمالية",
+        "scope": "شامل",
+        "status": "جاري",
+        "contractor": "شركه اعمال المحترفون للتجارة والمقاولات"
+      },
+      {
+        "id": "82",
+        "name": "استبدال شبكات المياه بمحافظة رماح",
+        "scope": "محافظة رماح",
+        "status": "مسلم ابتدائي",
+        "contractor": "شركة قلاع الانشاء للمقاولات المحدودة"
+      },
+      {
+        "id": "85",
+        "name": "احلال وتجديد شبكات المياه بمحافظات  الدرعية وحريملاء",
+        "scope": "محافظة الدرعية و محافظة حريملاء",
+        "status": "جاري",
+        "contractor": "شركة ماكسون للمقاولات"
+      }
+    ]
+  },
+  {
     "id": "ali-alshehri",
     "slug": "ali-alshehri",
     "name": "علي الشهري",
@@ -768,74 +836,6 @@
     ]
   },
   {
-    "id": "amjad-alfaleh",
-    "slug": "amjad-alfaleh",
-    "name": "أمجد الفالح",
-    "scope": "غرب الرياض - صرف",
-    "subProgram": "غرب الرياض - صرف",
-    "activeProjects": 4,
-    "deliveredProjects": 1,
-    "totalProjects": 7,
-    "pendingReportsCount": 0,
-    "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
-    "activeReports": 0,
-    "totalReportsCount": 0,
-    "phone": "555390254",
-    "email": "aalfaleh@nwc.com.sa",
-    "projects": [
-      {
-        "id": "52",
-        "name": "عقد تنفيذ شبكات صرف صحي بحي عرقة - عقد رقم 3",
-        "scope": "حي عرقة",
-        "status": "مسحوب",
-        "contractor": "شركة صلت للمقاولات"
-      },
-      {
-        "id": "55",
-        "name": "عقد تنفيذ شبكات الصرف الصحي بأجزاء من حي ظهرة لبن (عقد رقم 7)",
-        "scope": "حي ظهرة لبن",
-        "status": "مسحوب",
-        "contractor": "شركة ربوة التعمير(راكو) للمقاولات"
-      },
-      {
-        "id": "53",
-        "name": "عقد تنفيذ شبكات صرف صحي بأجزاء من حي طويق عقد رقم 8",
-        "scope": "حي طويق",
-        "status": "جاري",
-        "contractor": "الشركة الوطنية لأعمال المياه"
-      },
-      {
-        "id": "54",
-        "name": "عقد تنفيذ شبكات صرف صحي بأجزاء من حي طويق عقد رقم 7",
-        "scope": "حي طويق",
-        "status": "جاري",
-        "contractor": "شركة نظم تقنية المياه للمقاولات"
-      },
-      {
-        "id": "58",
-        "name": "عقد تنفيذ شبكات الصرف الصحي بحي العوالي - مرحلة ثانية",
-        "scope": "حي العوالي",
-        "status": "جاري",
-        "contractor": "شركة نظم البيئة للمقاولات"
-      },
-      {
-        "id": "56",
-        "name": "عقد تنفيذ خطوط صرف صحي رئيسية بحي المهدية (المرحلة الاولي)",
-        "scope": "حي المهدية",
-        "status": "مسلم ابتدائي",
-        "contractor": "شركة نظم البيئة للمقاولات"
-      },
-      {
-        "id": "57",
-        "name": "عقد تنفيذ شبكات الصرف الصحي بحي العوالي (مرحلة أولى)",
-        "scope": "حي العوالي",
-        "status": "جاري",
-        "contractor": "شركة الأعمال المدنية المحدودة"
-      }
-    ]
-  },
-  {
     "id": "ali-alqahtani",
     "slug": "ali-alqahtani",
     "name": "علي القحطاني",
@@ -846,9 +846,9 @@
     "totalProjects": 11,
     "pendingReportsCount": 0,
     "inProgressReportsCount": 0,
-    "processedReportsCount": 0,
+    "processedReportsCount": 4,
     "activeReports": 0,
-    "totalReportsCount": 0,
+    "totalReportsCount": 4,
     "phone": "555299813",
     "email": "aaalqahtani@nwc.com.sa",
     "projects": [
@@ -942,9 +942,9 @@
     "totalProjects": 16,
     "pendingReportsCount": 0,
     "inProgressReportsCount": 0,
-    "processedReportsCount": 1,
+    "processedReportsCount": 3,
     "activeReports": 0,
-    "totalReportsCount": 1,
+    "totalReportsCount": 3,
     "phone": "555022025",
     "email": "talnoufal@nwc.com.sa",
     "projects": [

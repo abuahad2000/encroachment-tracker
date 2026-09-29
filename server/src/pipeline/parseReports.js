@@ -62,7 +62,20 @@ export function parseReports(customFilePath = null) {
   try {
     const workbook = XLSX.readFile(filePath)
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rawData = XLSX.utils.sheet_to_json(sheet)
+    // Auto-detect header row to skip title/banner rows
+    const rowsGrid = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    let headerRowIndex = 0
+    let maxCols = 0
+    for (let i = 0; i < Math.min(rowsGrid.length, 15); i++) {
+      const row = rowsGrid[i] || []
+      const nonEmpties = row.filter(c => c !== undefined && c !== null && String(c).trim() !== '').length
+      if (nonEmpties > maxCols) {
+        maxCols = nonEmpties
+        headerRowIndex = i
+      }
+    }
+
+    const rawData = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex })
 
     // Helper to find value across candidate column keys (robust against extra spaces or slight name changes)
     const getField = (row, keyPatterns) => {
@@ -96,15 +109,15 @@ export function parseReports(customFilePath = null) {
         return date.toISOString().split('T')[0]
       }
 
-      const rawId = getField(row, ['رقم بلاغ التعدي', 'رقم البلاغ', 'رقم التعدي', 'رقم بلاغ', 'A'])
+      const rawId = getField(row, ['رقم بلاغ التعدي', 'رقم_بلاغ_التعدي', 'رقم البلاغ', 'رقم_البلاغ', 'رقم التعدي', 'رقم_التعدي', 'رقم بلاغ', 'id', 'ID', 'A'])
       const cleanId = rawId !== '' ? (typeof rawId === 'number' ? rawId : String(rawId).trim()) : (idx + 1)
 
-      const rawLng = getField(row, ['خط الطول', 'خط طول', 'longitude', 'Lng'])
-      const rawLat = getField(row, ['خط العرض', 'خط عرض', 'latitude', 'Lat'])
+      const rawLng = getField(row, ['خط الطول', 'خط_الطول', 'خط طول', 'longitude', 'Lng', 'lng', 'X'])
+      const rawLat = getField(row, ['خط العرض', 'خط_العرض', 'خط عرض', 'latitude', 'Lat', 'lat', 'Y'])
 
-      const rawStatus = getField(row, ['حالة البلاغ', 'الحالة', 'status'])
-      const rawContractor = getField(row, ['اسم المقاول', 'المقاول', 'اسم مقاول', 'contractor'])
-      const rawConversations = getField(row, ['سجل المحادثات', 'المحادثات', 'conversation'])
+      const rawStatus = getField(row, ['حالة البلاغ', 'حالة_البلاغ', 'الحالة', 'status', 'Status'])
+      const rawContractor = getField(row, ['اسم المقاول', 'اسم_المقاول', 'المقاول', 'اسم مقاول', 'contractor', 'Contractor'])
+      const rawConversations = getField(row, ['سجل المحادثات', 'سجل_المحادثات', 'المحادثات', 'conversation'])
 
       return {
         id: cleanId,

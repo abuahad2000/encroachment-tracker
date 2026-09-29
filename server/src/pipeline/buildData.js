@@ -41,13 +41,9 @@ export async function buildData(customReportsFile = null) {
               projects = parseProjects()
             } catch(e) {}
             
-            const { processReports } = await import('./matchEngine.js')
-            const processedReports = processReports(existingReports, projects, { water: {features:[]}, sanitation: {features:[]}, governorates: {features:[]} }, [], { customContractors: [], aliases: {} })
-            
-            const stats = calculateStats(processedReports, projects)
-            const managers = createManagersData(projects, processedReports)
+            const stats = calculateStats(existingReports, projects)
+            const managers = createManagersData(projects, existingReports)
 
-            fs.writeFileSync(reportsPath, JSON.stringify(processedReports, null, 2), 'utf-8')
             fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
             fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
             

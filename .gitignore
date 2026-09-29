@@ -5,7 +5,6 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
-# /server/data/generated/ is tracked so deployed environments start with full database
-/server/data/reports.json
+# Database files tracked for deployment persistence
 /server/data/import_logs.json
 /server/data/backups/
