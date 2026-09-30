@@ -7,97 +7,54 @@ import { parseAllKMZ } from './parseKmz.js'
 import { processReports } from './matchEngine.js'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 import { buildDistrictsClassification } from './districtClassification.js'
+import { DATA_DIR } from '../config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function safeWriteJsonSync(filePath, data) {
+  const dir = path.dirname(filePath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const tmpPath = `${filePath}.tmp.${Date.now()}`
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+  fs.renameSync(tmpPath, filePath)
+}
 
 export async function buildData(customReportsFile = null) {
   console.log('🔄 جاري معالجة البيانات...')
 
   try {
-    // ✅ شبكة الأمان الذكية: تحديد المسار والتحقق من وجود الملف قبل المعالجة
+    let reports = []
+    let rejectedRows = []
+    let nullDatesCount = 0
+
+    // ✅ تحديد مسار الملف أو استخدام البلاغات المحفوظة مسبقاً
     const defaultPath = path.join(__dirname, '../../../XLSX/بلاغات تعدي مقاولي شركة المياه الوطنية 12 سبتمبر.xlsx')
     const targetFile = customReportsFile || defaultPath
 
-    if (!fs.existsSync(targetFile)) {
-      console.warn(`⚠️ تحذير: ملف الإكسيل غير موجود في: ${targetFile}`)
-      
-      const outputDir = path.join(__dirname, '../../data/generated')
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true })
-      }
+    if (fs.existsSync(targetFile)) {
+      console.log(`📖 قراءة البلاغات من ملف الإكسيل: ${targetFile}`)
+      reports = parseReports(targetFile)
+      rejectedRows = reports.rejectedRows || []
+      nullDatesCount = reports.nullDatesCount || 0
+      console.log(`   ✓ تم قراءة ${reports.length} بلاغاً من ملف الإكسيل`)
+    } else {
+      console.warn(`⚠️ ملف الإكسيل غير موجود في: ${targetFile}`)
+      const generatedReportsPath = path.join(DATA_DIR, 'generated/reports.json')
+      const directReportsPath = path.join(DATA_DIR, 'reports.json')
 
-      const reportsPath = path.join(outputDir, 'reports.json')
-      
-      // 🧠 الذكاء الجديد: التحقق من وجود بيانات محفوظة مسبقاً وعدم مسحها
-      if (fs.existsSync(reportsPath)) {
+      let sourcePath = null
+      if (fs.existsSync(generatedReportsPath)) sourcePath = generatedReportsPath
+      else if (fs.existsSync(directReportsPath)) sourcePath = directReportsPath
+
+      if (sourcePath) {
         try {
-          const existingReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8'))
-          if (existingReports && existingReports.length > 0) {
-            console.log('✅ تم العثور على بيانات موجودة مسبقاً، سيتم الاحتفاظ بها وعدم مسحها.')
-            
-            // إعادة حساب الإحصائيات والمدراء بناءً على البيانات الموجودة لضمان تحديث الواجهة
-            let projects = []
-            try {
-              const { parseProjects } = await import('./parseProjects.js')
-              projects = parseProjects()
-            } catch(e) {}
-            
-            const stats = calculateStats(existingReports, projects)
-            const managers = createManagersData(projects, existingReports)
-
-            fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
-            fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
-            
-            console.log('✅ تم الاحتفاظ بالبيانات وإعادة حساب الإحصائيات بنجاح.')
-            return { success: true, stats, message: 'تم استخدام البيانات الموجودة مسبقاً' }
-          }
+          reports = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'))
+          console.log(`📖 استخدام البلاغات المحفوظة مسبقاً من: ${sourcePath} (${reports.length} بلاغاً)`)
         } catch (e) {
-          console.warn('خطأ في قراءة البيانات الموجودة:', e.message)
+          console.warn('خطأ في قراءة البلاغات المحفوظة:', e.message)
         }
       }
-
-      // محاولة القراءة من المسار الأصلي كبديل (إذا كان محفوظاً في المستودع)
-      const originalReportsPath = path.join(__dirname, '../../data/reports.json')
-      if (fs.existsSync(originalReportsPath)) {
-        try {
-          const originalData = JSON.parse(fs.readFileSync(originalReportsPath, 'utf-8'))
-          if (originalData && originalData.length > 0) {
-            fs.writeFileSync(reportsPath, JSON.stringify(originalData, null, 2), 'utf-8')
-            console.log('✅ تم نسخ البيانات من المسار الأصلي بنجاح.')
-            return { success: true, message: 'تم استخدام البيانات الأصلية' }
-          }
-        } catch (e) {}
-      }
-
-      // 🛑 في حال عدم وجود ملف بلاغات مسبق، نحرص دائماً على بناء المشاريع والطبقات الجغرافية من الملفات المصدرية
-      console.log('🔄 جاري بناء المشاريع والطبقات الجغرافية الأساسية...')
-      let projects = []
-      let geoJsonData = { water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }
-      try { projects = parseProjects() } catch(e) { console.warn('Error parsing projects:', e) }
-      try { geoJsonData = await parseAllKMZ() } catch(e) { console.warn('Error parsing KMZ:', e) }
-      const emptyReports = []
-      const stats = calculateStats(emptyReports, projects)
-      const managers = createManagersData(projects, emptyReports)
-
-      if (!fs.existsSync(reportsPath)) {
-        fs.writeFileSync(reportsPath, '[]', 'utf-8')
-      }
-      fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2), 'utf-8')
-      const districtsClassification = buildDistrictsClassification(projects)
-      fs.writeFileSync(path.join(outputDir, 'districts_classification.json'), JSON.stringify(districtsClassification, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2), 'utf-8')
-      fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify(geoJsonData, null, 2), 'utf-8')
-
-      return { success: true, stats, message: 'تم تهيئة المشاريع والطبقات بنجاح' }
     }
-
-    // ==========================================
-    // باقي الكود الأصلي (يعمل فقط عند وجود الملف أو عند الرفع من الواجهة)
-    // ==========================================
-    console.log('📖 قراءة البلاغات...')
-    const reports = parseReports(customReportsFile)
-    console.log(`   ✓ تم قراءة ${reports.length} بلاغاً`)
 
     console.log('📖 قراءة المشاريع...')
     const projects = parseProjects()
@@ -108,8 +65,8 @@ export async function buildData(customReportsFile = null) {
     console.log('   ✓ تم قراءة ملفات KMZ')
 
     // 2. Load overrides & contractors config
-    const overridesPath = path.join(__dirname, '../../data/overrides.json')
-    const overridesBackupPath = path.join(__dirname, '../../data/overrides_backup.json')
+    const overridesPath = path.join(DATA_DIR, 'overrides.json')
+    const overridesBackupPath = path.join(DATA_DIR, 'overrides_backup.json')
     const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
     const overridesMap = new Map()
 
@@ -145,7 +102,7 @@ export async function buildData(customReportsFile = null) {
       'خارج مسار خطوط المشروع المعتمدة (تابع للصيانة)'
     ]
     for (const [k, v] of overridesMap.entries()) {
-      if (v.excluded && AUTOMATED_EXCLUSIONS.includes(v.reason)) {
+      if (!v.isLocked && v.excluded && AUTOMATED_EXCLUSIONS.includes(v.reason)) {
         overridesMap.delete(k)
       }
     }
@@ -153,12 +110,12 @@ export async function buildData(customReportsFile = null) {
     const overrides = Array.from(overridesMap.values())
     if (overrides.length > 0) {
       try {
-        fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2))
-        fs.writeFileSync(overridesBackupPath, JSON.stringify(overrides, null, 2))
+        safeWriteJsonSync(overridesPath, overrides)
+        safeWriteJsonSync(overridesBackupPath, overrides)
       } catch (e) {}
     }
 
-    const contractorsPath = path.join(__dirname, '../../data/contractors.json')
+    const contractorsPath = path.join(DATA_DIR, 'contractors.json')
     let contractorsConfig = { customContractors: [], aliases: {} }
     if (fs.existsSync(contractorsPath)) {
       try {
@@ -173,17 +130,17 @@ export async function buildData(customReportsFile = null) {
     const stats = calculateStats(processedReports, projects)
     const managers = createManagersData(projects, processedReports)
 
-    const outputDir = path.join(__dirname, '../../data/generated')
+    const outputDir = path.join(DATA_DIR, 'generated')
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true })
     }
 
-    fs.writeFileSync(path.join(outputDir, 'reports.json'), JSON.stringify(processedReports, null, 2))
-    fs.writeFileSync(path.join(outputDir, 'projects.json'), JSON.stringify(projects, null, 2))
+    safeWriteJsonSync(path.join(outputDir, 'reports.json'), processedReports)
+    safeWriteJsonSync(path.join(outputDir, 'projects.json'), projects)
     const districtsClassification = buildDistrictsClassification(projects)
-    fs.writeFileSync(path.join(outputDir, 'districts_classification.json'), JSON.stringify(districtsClassification, null, 2))
-    fs.writeFileSync(path.join(outputDir, 'stats.json'), JSON.stringify(stats, null, 2))
-    fs.writeFileSync(path.join(outputDir, 'managers.json'), JSON.stringify(managers, null, 2))
+    safeWriteJsonSync(path.join(outputDir, 'districts_classification.json'), districtsClassification)
+    safeWriteJsonSync(path.join(outputDir, 'stats.json'), stats)
+    safeWriteJsonSync(path.join(outputDir, 'managers.json'), managers)
 
     const cleanStr = (s) => (s || '').replace(/[^\w\d\u0600-\u06FF]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
     const enrichFeatures = (features) => {
@@ -238,7 +195,7 @@ export async function buildData(customReportsFile = null) {
     enrichFeatures(geoJsonData.sanitation?.features || [])
     enrichGovFeatures(geoJsonData.governorates?.features || [])
 
-    fs.writeFileSync(path.join(outputDir, 'layers.json'), JSON.stringify(geoJsonData, null, 2))
+    safeWriteJsonSync(path.join(outputDir, 'layers.json'), geoJsonData)
     syncContractorDirectory(projects)
 
     console.log('\n✅ تم إتمام المعالجة بنجاح!')
@@ -250,7 +207,10 @@ export async function buildData(customReportsFile = null) {
     console.log(`   • متوسط التأخير: ${stats.avgDelay} يوم`)
     console.log(`   • آخر تحديث: ${new Date().toLocaleString('ar-SA')}`)
 
-    return { success: true, stats }
+    if (reports.rejectedRows) rejectedRows = reports.rejectedRows
+    if (reports.nullDatesCount !== undefined) nullDatesCount = reports.nullDatesCount
+
+    return { success: true, stats, rejectedRows, nullDatesCount }
   } catch (err) {
     console.error('❌ خطأ في المعالجة:', err.message)
     throw err
@@ -283,7 +243,7 @@ export function calculateStats(reports, projects) {
     processedCount: processed.length,
     assignedCount: assigned.length,
     excludedCount: excluded.length,
-    matchedReports: pending.length,
+    matchedReports: assigned.length,
     underProcessingCount: underProcessing.length,
     archivedCount: processed.length,
     avgDelay: ageDays.length > 0 ? Math.round(ageDays.reduce((a, b) => a + b) / ageDays.length) : 0,

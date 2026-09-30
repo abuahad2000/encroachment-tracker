@@ -5,9 +5,11 @@ import { normalizeArabic } from './normalize.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+import { DATA_DIR } from '../config.js'
+
 // مسارات ملفات أحياء الصيانة
-const maintenanceDistrictsPath = path.join(__dirname, '../../data/maintenance_districts.json')
-const maintenanceDistrictsBackupPath = path.join(__dirname, '../../data/maintenance_districts_backup.json')
+const maintenanceDistrictsPath = path.join(DATA_DIR, 'maintenance_districts.json')
+const maintenanceDistrictsBackupPath = path.join(DATA_DIR, 'maintenance_districts_backup.json')
 
 // تحميل قائمة أحياء الصيانة المعتمدة
 export function loadMaintenanceDistricts() {

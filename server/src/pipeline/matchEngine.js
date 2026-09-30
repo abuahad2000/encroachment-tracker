@@ -556,7 +556,21 @@ export function classifyReportSectorFromText(report) {
   return 'عام'
 }
 
-export function processReports(reports, projects, geoJsonData, overrides, contractorsConfig) {
+export function computeAgeDays(report, processingDate = new Date()) {
+  const dateStr = report.dateReport || report.dateIncident
+  if (!dateStr) {
+    return { ageDays: null, missingDate: true }
+  }
+  const refDate = new Date(dateStr)
+  if (isNaN(refDate.getTime())) {
+    return { ageDays: null, missingDate: true }
+  }
+  const pDate = processingDate instanceof Date ? processingDate : new Date(processingDate)
+  const diffDays = Math.floor((pDate - refDate) / (1000 * 60 * 60 * 24))
+  return { ageDays: diffDays, missingDate: false }
+}
+
+export function processReports(reports, projects, geoJsonData, overrides, contractorsConfig, processingDate = new Date()) {
   const processed = []
 
   // تصفية المشاريع النشطة
@@ -610,9 +624,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
 
     // استبعاد قطعي ومباشر لأي بلاغ يقع في حي مصنف للصيانة دون ربط بأي مشروع رأسمالي
     if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
-      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
-      const today = new Date('2026-09-18')
-      const ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      const ageInfo = computeAgeDays(report, processingDate)
       const cls = classifyReportSectorFromText(report)
       processed.push({
         ...report,
@@ -626,7 +638,8 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         actionCategory: 'تشغيل وصيانة',
         isMaintenance: true,
         sector: cls === 'عام' ? 'صرف' : cls,
-        ageDays
+        ageDays: ageInfo.ageDays,
+        ...(ageInfo.missingDate ? { missingDate: true } : {})
       })
       continue
     }
@@ -654,9 +667,9 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         const cls = classifyReportSectorFromText(report)
         result.sector = cls === 'عام' ? 'صرف' : cls
       }
-      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
-      const today = new Date('2026-09-18')
-      result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      const ageInfo = computeAgeDays(report, processingDate)
+      result.ageDays = ageInfo.ageDays
+      if (ageInfo.missingDate) result.missingDate = true
       processed.push(result)
       continue
     } else if (override?.projectId || (override?.isLocked && (override?.project || override?.projectId))) {
@@ -696,9 +709,9 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       } else {
         result.sector = classifyReportSectorFromText(report)
       }
-      const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
-      const today = new Date('2026-09-18')
-      result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+      const ageInfo = computeAgeDays(report, processingDate)
+      result.ageDays = ageInfo.ageDays
+      if (ageInfo.missingDate) result.missingDate = true
       if (report.status === 'تحت معالجة المقاول') {
         result.actionCategory = 'تحت معالجة المقاول'
       } else if (report.status === 'تمت المعالجة') {
@@ -796,9 +809,9 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.archived = true
     }
 
-    const referenceDate = new Date(report.dateIncident || report.dateReport || '2026-09-18')
-    const today = new Date('2026-09-18')
-    result.ageDays = Math.floor((today - referenceDate) / (1000 * 60 * 60 * 24))
+    const ageInfo = computeAgeDays(report, processingDate)
+    result.ageDays = ageInfo.ageDays
+    if (ageInfo.missingDate) result.missingDate = true
 
     processed.push(result)
   }

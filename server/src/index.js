@@ -15,6 +15,7 @@ import {
   removeMaintenanceDistrict, 
   buildDistrictsClassification 
 } from './pipeline/districtClassification.js'
+import { DATA_DIR, UPLOADS_DIR } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -34,22 +35,22 @@ export function triggerFullRecalculation() {
     const layers = loadGeneratedData('layers.json') || { water: { features: [] }, sanitation: { features: [] }, governorates: { features: [] } }
     
     // قراءة ملف التعديلات اليدوية
-    const overridesPath = path.join(__dirname, '../data/overrides.json')
+    const overridesPath = path.join(DATA_DIR, 'overrides.json')
     let overrides = []
     if (fs.existsSync(overridesPath)) {
       try { overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf-8')) } catch (e) {}
     }
 
     // قراءة مقاولي الدليل
-    const dirPath = path.join(__dirname, '../data/contractor_directory.json')
+    const dirPath = path.join(DATA_DIR, 'contractor_directory.json')
     let contractorsConfig = null
     if (fs.existsSync(dirPath)) {
       try { contractorsConfig = JSON.parse(fs.readFileSync(dirPath, 'utf-8')) } catch (e) {}
     }
 
     // قراءة البلاغات الموجودة
-    const reportsPath = path.join(__dirname, '../data/generated/reports.json')
-    const directReportsPath = path.join(__dirname, '../data/reports.json')
+    const reportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const directReportsPath = path.join(DATA_DIR, 'reports.json')
     let rawReports = []
     if (fs.existsSync(reportsPath)) {
       try { rawReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8')) } catch (e) {}
@@ -58,17 +59,17 @@ export function triggerFullRecalculation() {
     }
 
     const classification = buildDistrictsClassification(projects)
-    safeWriteJsonSync(path.join(__dirname, '../data/generated/districts_classification.json'), classification)
+    safeWriteJsonSync(path.join(DATA_DIR, 'generated/districts_classification.json'), classification)
 
     if (rawReports && rawReports.length > 0) {
       const processedReports = processReports(rawReports, projects, layers, overrides, contractorsConfig)
       const stats = calculateStats(processedReports, projects)
       const managers = createManagersData(projects, processedReports)
 
-      safeWriteJsonSync(path.join(__dirname, '../data/generated/reports.json'), processedReports)
+      safeWriteJsonSync(path.join(DATA_DIR, 'generated/reports.json'), processedReports)
       safeWriteJsonSync(directReportsPath, processedReports)
-      safeWriteJsonSync(path.join(__dirname, '../data/generated/stats.json'), stats)
-      safeWriteJsonSync(path.join(__dirname, '../data/generated/managers.json'), managers)
+      safeWriteJsonSync(path.join(DATA_DIR, 'generated/stats.json'), stats)
+      safeWriteJsonSync(path.join(DATA_DIR, 'generated/managers.json'), managers)
 
       console.log(`✅ تم إعادة معالجة وتحديث ${processedReports.length} بلاغاً وإحصائياتها وتصنيف الأحياء بنجاح.`)
       return { success: true, count: processedReports.length }
@@ -84,15 +85,15 @@ export function triggerFullRecalculation() {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads')
+    const uploadDir = UPLOADS_DIR
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true })
     }
     cb(null, uploadDir)
   },
   filename: (req, file, cb) => {
-    // Save with original name (will replace old file)
-    cb(null, 'reports.xlsx')
+    // Save with unique name to prevent collisions during upload
+    cb(null, `reports_${Date.now()}.xlsx`)
   }
 })
 
@@ -159,7 +160,7 @@ if (fs.existsSync(distPath)) {
 
 // Utility to load generated data
 function loadGeneratedData(file) {
-  const filePath = path.join(__dirname, `../data/generated/${file}`)
+  const filePath = path.join(DATA_DIR, `generated/${file}`)
   try {
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
@@ -419,7 +420,7 @@ app.get('/api/layers', (req, res) => {
   })
 })
 
-// Upload new reports file (مع ميزة التصفير التام قبل المعالجة)
+// Upload new reports file (مع الاحتفاظ بالتعديلات اليدوية والكتابة الذرية الآمنة)
 app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -428,87 +429,42 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
 
     const uploadedPath = req.file.path
     const xlsxDir = path.join(__dirname, '../../XLSX')
-    const uploadsDir = path.join(__dirname, '../../uploads')
     const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
-    // ==========================================
-    // الخطوة 1: تصفير النتائج والبيانات القديمة تماماً
-    // ==========================================
-    console.log('🧹 جاري تصفير البيانات القديمة لضمان بداية نظيفة...')
-    const generatedDir = path.join(__dirname, '../data/generated')
-    const overridesPath = path.join(__dirname, '../data/overrides.json')
-    const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+    console.log(`📤 جاري معالجة وتدقيق الملف الجديد بأمان: ${uploadedPath}`)
+    const result = await buildData(uploadedPath)
 
-    // تفريغ ملفات JSON من البيانات القديمة (نتركها كـ مصفوفة فارغة [] لتجنب أخطاء القراءة)
-    if (fs.existsSync(generatedDir)) {
-      fs.writeFileSync(path.join(generatedDir, 'reports.json'), '[]', 'utf-8')
-      fs.writeFileSync(path.join(generatedDir, 'stats.json'), '{}', 'utf-8')
-      fs.writeFileSync(path.join(generatedDir, 'managers.json'), '[]', 'utf-8')
-      console.log('✅ تم تصفير: reports.json, stats.json, managers.json')
+    if (!result || !result.success) {
+      throw new Error(result?.error || 'فشل في بناء ومعالجة البيانات من الملف المرفوع')
     }
 
-    if (fs.existsSync(overridesPath)) {
-      fs.writeFileSync(overridesPath, '[]', 'utf-8')
-      console.log('✅ تم تصفير: overrides.json (سيتم إعادة بنائها من الملف الجديد)')
-    }
-    if (fs.existsSync(overridesBackupPath)) {
-      fs.writeFileSync(overridesBackupPath, '[]', 'utf-8')
-    }
-
-    // ==========================================
-    // الخطوة 2: استبدال ملف الإكسيل القديم بالجديد
-    // ==========================================
-    if (fs.existsSync(uploadedReportsCopy)) {
-      try {
-        fs.unlinkSync(uploadedReportsCopy)
-        console.log('🗑️ تم حذف ملف البلاغات المحفوظ السابق')
-      } catch (e) {
-        console.warn('Could not remove previous reports.xlsx:', e.message)
-      }
-    }
-
-    // تنظيف مجلد uploads
-    if (fs.existsSync(uploadsDir)) {
-      try {
-        const files = fs.readdirSync(uploadsDir)
-        for (const f of files) {
-          const p = path.join(uploadsDir, f)
-          if (p !== uploadedPath) {
-            try { fs.unlinkSync(p) } catch (e) {}
-          }
-        }
-      } catch (e) {}
-    }
-
-    // اعتماد الملف الجديد مباشرة كملف فعال
+    // بعد نجاح المعالجة بالكامل، نقوم باعتماد ملف الإكسيل كملف فعال
     if (!fs.existsSync(xlsxDir)) {
       fs.mkdirSync(xlsxDir, { recursive: true })
     }
     fs.copyFileSync(uploadedPath, uploadedReportsCopy)
     try {
-      fs.unlinkSync(uploadedPath) // حذف الملف المؤقت
+      fs.unlinkSync(uploadedPath) // حذف الملف المؤقت المرفوع
     } catch (e) {}
 
-    // ==========================================
-    // الخطوة 3: تطبيق الآلية (Pipeline) على الملف الجديد من الصفر
-    // ==========================================
-    console.log(`📤 جاري تطبيق آلية المعالجة والربط على الملف الجديد: ${uploadedReportsCopy}`)
-    const result = await buildData(uploadedReportsCopy)
-
-    // ==========================================
-    // الخطوة 4: إعادة توليد التقرير التنفيذي
-    // ==========================================
+    // إعادة توليد التقرير التنفيذي
     await runExecutiveExcelExport()
 
     res.json({
       success: true,
-      message: 'تم تصفير البيانات القديمة، واستلام الملف الجديد، وتطبيق الآلية بنجاح من الصفر',
+      message: 'تم استلام ومعالجة الملف بنجاح وتحديث البيانات دون فقدان التعديلات السابقة',
       file: req.file.originalname,
       stats: result?.stats,
+      nullDatesCount: result?.nullDatesCount || 0,
+      rejectedRowsCount: result?.rejectedRows?.length || 0,
+      rejectedRows: result?.rejectedRows || [],
       timestamp: new Date().toISOString()
     })
   } catch (err) {
     console.error('❌ Error uploading/processing file:', err)
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path) } catch (e) {}
+    }
     res.status(500).json({ 
       error: 'فشل في رفع ومعالجة الملف', 
       details: err.message 
@@ -521,8 +477,8 @@ app.post('/api/override', async (req, res) => {
   const { reportId, projectId, excluded, reason, customContractor, customProgramManager, customSector } = req.body
   const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
 
-  const overridesPath = path.join(__dirname, '../data/overrides.json')
-  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+  const overridesPath = path.join(DATA_DIR, 'overrides.json')
+  const overridesBackupPath = path.join(DATA_DIR, 'overrides_backup.json')
   const overridesMap = new Map()
 
   if (fs.existsSync(overridesBackupPath)) {
@@ -552,8 +508,8 @@ app.post('/api/override', async (req, res) => {
   let overrides = Array.from(overridesMap.values())
 
   // Find existing report to capture secondary keys (license, coordinates)
-  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
-  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
+  const reportsPath = path.join(DATA_DIR, 'generated/reports.json')
+  const projectsPath = path.join(DATA_DIR, 'generated/projects.json')
   let existingReport = null
   let allProjects = []
 
@@ -712,11 +668,11 @@ app.post('/api/reports/assign', async (req, res) => {
   }
 
   const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
-  const reportsPath = path.join(__dirname, '../data/generated/reports.json')
-  const projectsPath = path.join(__dirname, '../data/generated/projects.json')
-  const managersPath = path.join(__dirname, '../data/generated/managers.json')
-  const overridesPath = path.join(__dirname, '../data/overrides.json')
-  const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+  const reportsPath = path.join(DATA_DIR, 'generated/reports.json')
+  const projectsPath = path.join(DATA_DIR, 'generated/projects.json')
+  const managersPath = path.join(DATA_DIR, 'generated/managers.json')
+  const overridesPath = path.join(DATA_DIR, 'overrides.json')
+  const overridesBackupPath = path.join(DATA_DIR, 'overrides_backup.json')
 
   let allProjects = []
   let allManagers = []
@@ -842,9 +798,9 @@ app.post('/api/unassign-project', async (req, res) => {
     }
 
     const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
-    const reportsPath = path.join(__dirname, '../data/generated/reports.json')
-    const overridesPath = path.join(__dirname, '../data/overrides.json')
-    const overridesBackupPath = path.join(__dirname, '../data/overrides_backup.json')
+    const reportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const overridesPath = path.join(DATA_DIR, 'overrides.json')
+    const overridesBackupPath = path.join(DATA_DIR, 'overrides_backup.json')
 
     if (!fs.existsSync(reportsPath)) {
       return res.status(404).json({ error: 'ملف التقارير غير موجود' })
@@ -945,7 +901,7 @@ app.post('/api/refresh-data', async (req, res) => {
 })
 
 // Contractors registry file path
-const contractorsConfigPath = path.join(__dirname, '../data/contractors.json')
+const contractorsConfigPath = path.join(DATA_DIR, 'contractors.json')
 
 function loadContractorsConfig() {
   if (fs.existsSync(contractorsConfigPath)) {
@@ -1098,10 +1054,10 @@ app.post('/api/contractors', async (req, res) => {
 })
 
 // ===== Contractor Directory Endpoints =====
-const contractorDirectoryPath = path.join(__dirname, '../data/contractor_directory.json')
-const contractorDirectoryBackupPath = path.join(__dirname, '../data/contractor_directory_backup.json')
-const contractorProfilesPath = path.join(__dirname, '../data/contractor_profiles.json')
-const contractorProfilesBackupPath = path.join(__dirname, '../data/contractor_profiles_backup.json')
+const contractorDirectoryPath = path.join(DATA_DIR, 'contractor_directory.json')
+const contractorDirectoryBackupPath = path.join(DATA_DIR, 'contractor_directory_backup.json')
+const contractorProfilesPath = path.join(DATA_DIR, 'contractor_profiles.json')
+const contractorProfilesBackupPath = path.join(DATA_DIR, 'contractor_profiles_backup.json')
 
 function loadContractorDirectory() {
   const mergedMap = new Map()
