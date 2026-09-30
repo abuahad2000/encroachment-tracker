@@ -290,21 +290,6 @@ export function getFeatureSector(feat, project) {
 }
 
 export function matchReportToProject(report, activeProjects, contractorsConfig, maintenanceDistricts = null) {
-  // 0. فحص تصنيف مقاولي التشغيل والصيانة من السجل المرجعي المحمي
-  const maintCheck = checkMaintenanceContractor(report.contractorName, report)
-  if (maintCheck.isMaintenance) {
-    return {
-      matched: false,
-      excluded: true,
-      project: null,
-      programManager: null,
-      confidence: 0,
-      reason: 'maintenance_contractor',
-      excludedReason: maintCheck.excludedReason || 'المقاول تابع لإدارة التشغيل والصيانة (غير تابع للمشاريع الرأسمالية)',
-      actionCategory: 'تشغيل وصيانة',
-      isMaintenance: true
-    }
-  }
 
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
@@ -483,14 +468,17 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
-  // قاعدة صارمة: إذا كان للبلاغ إحداثيات جغرافية صالحة داخل الرياض ولا يقع في أي نطاق مكاني لمشاريع KMZ، يُستبعد فوراً
-  if (hasCoords && !isGovReport && !hasAnySpatialMatch) {
+  // الخطوة 2: إذا كان للبلاغ إحداثيات جغرافية صالحة داخل الرياض ولا يقع في أي نطاق مكاني لمشاريع KMZ، يُستبعد فوراً للصيانة
+  if (!hasAnySpatialMatch && hasCoords && !isGovReport) {
     return {
       matched: false,
       excluded: true,
-      excludedReason: 'خارج النطاق الجغرافي للمشاريع (غير تابع لنطاق مكاني)',
       confidence: 0,
-      reason: 'outside_spatial_scope'
+      reason: 'outside_capital_scope',
+      exclusionReason: 'خارج النطاق الجغرافي للمشاريع الرأسمالية (يعتبر تشغيل وصيانة)',
+      excludedReason: 'خارج النطاق الجغرافي للمشاريع الرأسمالية (يعتبر تشغيل وصيانة)',
+      actionCategory: 'تشغيل وصيانة',
+      isMaintenance: true
     }
   }
 
@@ -536,6 +524,55 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
           reason: reason.join(','),
           featSector: getProjectSector(project)
         })
+      }
+    }
+  }
+
+  // الخطوة 3: إذا كان داخل النطاق المكاني → تحقق من المقاول والقطاع
+  if (candidates.length > 0 && hasValidContractor(report.contractorName)) {
+    let capitalContractor = checkCapitalContractor(report.contractorName)
+    if (!capitalContractor) {
+      // التحقق مما إذا كان المقاول هو المقاول المعين لمشروع مرشح
+      const projectContractorMatch = candidates.find(c => matchContractor(report.contractorName, [c.project?.contractor]))
+      if (projectContractorMatch) {
+        capitalContractor = {
+          name: projectContractorMatch.project.contractor,
+          allowed_sectors: ['صرف', 'مياه']
+        }
+      }
+    }
+
+    if (!capitalContractor) {
+      // المقاول غير مسجل في قائمة المقاولين الرأسماليين → صيانة
+      return {
+        matched: false,
+        excluded: true,
+        project: null,
+        programManager: null,
+        confidence: 0,
+        reason: 'contractor_not_in_capital_project',
+        exclusionReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
+        excludedReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
+        actionCategory: 'تشغيل وصيانة',
+        isMaintenance: true
+      }
+    }
+
+    // تحقق من تطابق نوع الخدمة
+    const repSector = reportSector || classifyReportSectorFromText(report)
+    if (capitalContractor.allowed_sectors && capitalContractor.allowed_sectors.length > 0 && repSector && repSector !== 'عام') {
+      if (!capitalContractor.allowed_sectors.includes(repSector)) {
+        return {
+          matched: false,
+          excluded: true,
+          project: null,
+          programManager: null,
+          confidence: 0,
+          reason: 'sector_mismatch',
+          exclusionReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
+          excludedReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
+          actionCategory: 'مستبعد'
+        }
       }
     }
   }
@@ -865,36 +902,12 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       continue
     }
 
-    // (4) فحص المقاول: هل المقاول تابع لإدارة التشغيل والصيانة؟
+    // (4) تحديد اسم المقاول الفعلي (مع مراعاة التعديل اليدوي إن وجد)
     const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')
       ? String(override.customContractor).trim()
       : report.contractorName
 
-    const maintCheck = checkMaintenanceContractor(effectiveContractor, report)
-    if (maintCheck.isMaintenance) {
-      const ageInfo = computeAgeDays(report, processingDate)
-      const cls = classifyReportSectorFromText(report)
-      processed.push({
-        ...report,
-        contractorName: effectiveContractor,
-        matched: false,
-        excluded: true,
-        project: null,
-        programManager: null,
-        confidence: 0,
-        reason: 'maintenance_contractor',
-        exclusionReason: `المقاول ${effectiveContractor || ''} تابع لإدارة التشغيل والصيانة (ليس مشروعاً رأسمالياً)`,
-        excludedReason: `المقاول ${effectiveContractor || ''} تابع لإدارة التشغيل والصيانة (ليس مشروعاً رأسمالياً)`,
-        actionCategory: 'تشغيل وصيانة',
-        isMaintenance: true,
-        sector: cls,
-        ageDays: ageInfo.ageDays,
-        ...(ageInfo.missingDate ? { missingDate: true } : {})
-      })
-      continue
-    }
-
-    // (5) باقي المحرك
+    // (5) تطبيق محرك المطابقة (الفحص المكاني هو الحاكم أولاً ثم فحص المقاول)
     const reportToMatch = {
       ...report,
       contractorName: effectiveContractor

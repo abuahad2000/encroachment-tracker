@@ -135,7 +135,8 @@ export function checkCapitalContractor(contractorName) {
       return {
         ...c,
         programManagers: c.approved_program_managers || c.programManagers || [],
-        projects: c.linked_project_ids || c.projects || []
+        projects: c.linked_project_ids || c.projects || [],
+        allowed_sectors: c.allowed_sectors || ['صرف', 'مياه']
       }
     }
   }
