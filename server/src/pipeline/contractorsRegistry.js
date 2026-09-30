@@ -120,7 +120,8 @@ export function checkMaintenanceContractor(contractorName, report = null) {
 }
 
 /**
- * Check if the contractor is classified as Capital Projects
+ * Check if the contractor is classified as Capital Projects.
+ * Supports department_type='capital_project' and classification='dual'.
  */
 export function checkCapitalContractor(contractorName) {
   if (!contractorName) return null
@@ -128,7 +129,9 @@ export function checkCapitalContractor(contractorName) {
   const contractors = reg.contractors || reg.capitalContractors || []
 
   for (const c of contractors) {
-    const isCapital = c.department_type === 'capital_project' || c.classification === 'capital'
+    const isCapital = c.department_type === 'capital_project' ||
+                      c.classification === 'capital_project' ||
+                      c.classification === 'dual'
     if (!isCapital) continue
 
     if (matchesContractor(contractorName, c)) {
@@ -142,4 +145,48 @@ export function checkCapitalContractor(contractorName) {
   }
 
   return null
+}
+
+/**
+ * Validate contractor against registry for Spatial-First logic.
+ * Returns { isValid, contractor, reason }
+ * Used by matchEngine after spatial check passes.
+ *
+ * @param {string} contractorName - name from report
+ * @param {string|null} reportSector - 'مياه' | 'صرف' | 'عام' | null
+ * @returns {{ isValid: boolean, contractor?: object, reason?: string }}
+ */
+export function getContractorValidation(contractorName, reportSector = null) {
+  if (!contractorName) return { isValid: false, reason: 'no_contractor_name' }
+
+  const reg = loadContractorsRegistry()
+  const contractors = reg.contractors || []
+
+  // البحث في السجل بالاسم والاسم المنظف والـ aliases
+  let matched = null
+  for (const c of contractors) {
+    if (matchesContractor(contractorName, c)) {
+      matched = c
+      break
+    }
+  }
+
+  if (!matched) {
+    return { isValid: false, reason: 'not_in_registry' }
+  }
+
+  // مقاولو الصيانة البحتة: مستبعدون دائماً من التحقق الرأسمالي
+  if (matched.classification === 'maintenance' && matched.department_type === 'maintenance') {
+    return { isValid: false, reason: 'maintenance_only_contractor', contractor: matched }
+  }
+
+  // فحص توافق القطاع (يتجاهل الفحص إذا كان القطاع 'عام' أو غير محدد)
+  if (reportSector && reportSector !== 'عام' && matched.allowed_sectors && matched.allowed_sectors.length > 0) {
+    const sectorAllowed = matched.allowed_sectors.includes(reportSector)
+    if (!sectorAllowed) {
+      return { isValid: false, reason: 'sector_mismatch', contractor: matched }
+    }
+  }
+
+  return { isValid: true, contractor: matched }
 }

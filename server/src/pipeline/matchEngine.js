@@ -2,7 +2,7 @@ import { normalizeArabic, similarity } from './normalize.js'
 import * as turf from '@turf/turf'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 import { isDistrictInMaintenance, loadMaintenanceDistricts } from './districtClassification.js'
-import { checkMaintenanceContractor, checkCapitalContractor } from './contractorsRegistry.js'
+import { checkMaintenanceContractor, checkCapitalContractor, getContractorValidation } from './contractorsRegistry.js'
 
 const SIMILARITY_THRESHOLD = 0.82
 const MAINTENANCE_KEYWORDS = ['طارئ', 'انكسار', 'صيانة', 'دورية', 'إصلاح']
@@ -528,54 +528,60 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
-  // الخطوة 3: إذا كان داخل النطاق المكاني → تحقق من المقاول والقطاع
+  // الخطوة 3: إذا كان داخل النطاق المكاني → تحقق من المقاول والقطاع باستخدام getContractorValidation
   if (candidates.length > 0 && hasValidContractor(report.contractorName)) {
-    let capitalContractor = checkCapitalContractor(report.contractorName)
-    if (!capitalContractor) {
-      // التحقق مما إذا كان المقاول هو المقاول المعين لمشروع مرشح
-      const projectContractorMatch = candidates.find(c => matchContractor(report.contractorName, [c.project?.contractor]))
-      if (projectContractorMatch) {
-        capitalContractor = {
-          name: projectContractorMatch.project.contractor,
-          allowed_sectors: ['صرف', 'مياه']
-        }
-      }
-    }
-
-    if (!capitalContractor) {
-      // المقاول غير مسجل في قائمة المقاولين الرأسماليين → صيانة
-      return {
-        matched: false,
-        excluded: true,
-        project: null,
-        programManager: null,
-        confidence: 0,
-        reason: 'contractor_not_in_capital_project',
-        exclusionReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
-        excludedReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
-        actionCategory: 'تشغيل وصيانة',
-        isMaintenance: true
-      }
-    }
-
-    // تحقق من تطابق نوع الخدمة
     const repSector = reportSector || classifyReportSectorFromText(report)
-    if (capitalContractor.allowed_sectors && capitalContractor.allowed_sectors.length > 0 && repSector && repSector !== 'عام') {
-      if (!capitalContractor.allowed_sectors.includes(repSector)) {
-        return {
-          matched: false,
-          excluded: true,
-          project: null,
-          programManager: null,
-          confidence: 0,
-          reason: 'sector_mismatch',
-          exclusionReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
-          excludedReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
-          actionCategory: 'مستبعد'
+    const validation = getContractorValidation(report.contractorName, repSector)
+
+    if (!validation.isValid) {
+      // تحقق مزدوج: هل هو مسجل كمقاول لأحد المشاريع المرشحة مباشرةً؟
+      const projectContractorMatch = candidates.find(c => matchContractor(report.contractorName, [c.project?.contractor]))
+      if (!projectContractorMatch) {
+        if (validation.reason === 'sector_mismatch') {
+          return {
+            matched: false,
+            excluded: true,
+            project: null,
+            programManager: null,
+            confidence: 0,
+            reason: 'sector_mismatch',
+            exclusionReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
+            excludedReason: `المقاول لا يعمل في قطاع ${repSector} ضمن المشاريع الرأسمالية`,
+            actionCategory: 'مستبعد'
+          }
+        }
+        if (validation.reason === 'not_in_registry') {
+          return {
+            matched: false,
+            excluded: true,
+            project: null,
+            programManager: null,
+            confidence: 0,
+            reason: 'contractor_not_in_capital_project',
+            exclusionReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
+            excludedReason: `المقاول ${report.contractorName} غير مسجل في قائمة مقاولي المشاريع الرأسمالية`,
+            actionCategory: 'تشغيل وصيانة',
+            isMaintenance: true
+          }
+        }
+        if (validation.reason === 'maintenance_only_contractor') {
+          return {
+            matched: false,
+            excluded: true,
+            project: null,
+            programManager: null,
+            confidence: 0,
+            reason: 'contractor_not_in_capital_project',
+            exclusionReason: `المقاول ${report.contractorName} تابع للتشغيل والصيانة فقط`,
+            excludedReason: `المقاول ${report.contractorName} تابع للتشغيل والصيانة فقط`,
+            actionCategory: 'تشغيل وصيانة',
+            isMaintenance: true
+          }
         }
       }
     }
   }
+
 
   // إذا وقعت النقطة داخل نطاقين مختلفي النوع، اربطه بالنطاق المطابق لنوعه ولا تستبعده
   if (candidates.length > 1 && (reportSector === 'مياه' || reportSector === 'صرف')) {
