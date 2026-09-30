@@ -6,17 +6,9 @@
 
 ## 1. ترتيب فحوصات المطابقة في matchEngine.js
 
-تتم معالجة كل بلاغ عبر دالة `processReports` ودالة `matchReportToProject` في [`server/src/pipeline/matchEngine.js`](file:///c:/antigravity%20files%20IDE/encroachment-tracker/server/src/pipeline/matchEngine.js) وفق الترتيب التسلسلي التالي:
+تتم معالجة كل بلاغ عبر دالة `processReports` ودالة `matchReportToProject` في [`server/src/pipeline/matchEngine.js`](file:///c:/antigravity%20files%20IDE/encroachment-tracker/server/src/pipeline/matchEngine.js) وفق الترتيب التسلسلي المعتمد التالي:
 
-1. **فحص أحياء الصيانة المباشر** (`matchEngine.js: L612-632`):
-   - يُستدعى `isDistrictInMaintenance(report.district, maintenanceDistricts)`.
-   - **النتيجة**: استبعاد قطعي مباشر (`matched: false`, `excluded: true`).
-   - **نسبة الثقة**: `confidence = 0`.
-   - **سبب الاستبعاد**: نص حرفي: ``حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)``.
-   - **التصنيف**: `actionCategory = 'تشغيل وصيانة'`.
-   - **الإجراء**: إنهاء الفحص فوراً للبلاغ بالانتقال للبلاغ التالي (`continue`).
-
-2. **فحص التعديلات اليدوية للاستبعاد (Override Excluded)** (`matchEngine.js: L635-661`):
+1. **فحص التعديلات اليدوية للاستبعاد (Override Excluded)** (`matchEngine.js: L726-752`) ← **الأولوية القصوى**:
    - فحص وجود قيد مثبت للبلاغ في `overrides.json` بقيمة `override.excluded === true`.
    - **النتيجة**: استبعاد يدوي معتمد (`matched: false`, `excluded: true`, `isLocked: true`).
    - **نسبة الثقة**: `confidence = 0`.
@@ -24,15 +16,35 @@
    - **التصنيف**: `actionCategory = 'مستبعد'`.
    - **الإجراء**: إنهاء الفحص والانتقال للبلاغ التالي (`continue`).
 
-3. **فحص التعديلات اليدوية للتثبيت بمشروع (Override Project / Locked)** (`matchEngine.js: L662-710`):
-   - فحص وجود قيد يدوي مثبت برقم مشروع `override.projectId` أو `override.customProgramManager`.
+2. **فحص التعديلات اليدوية للتثبيت (Override Project)** (`matchEngine.js: L755-804`) ← **الثاني**:
+   - فحص وجود قيد يدوي مثبت برقم مشروع `override.projectId` أو `override.customProgramManager` أو قفل `isLocked`.
    - **النتيجة**: ربط يدوي مثبت (`matched: true`, `excluded: false`, `isLocked: true`).
    - **نسبة الثقة**: `confidence = 1.0` (ثابتة).
    - **السبب المسجل**: `override.reason` أو النص الحرفي: `'تثبيت وتعديل معتمد'`.
    - **التصنيف**: حسب حالة البلاغ (`report.status`): `'تحت معالجة المقاول'` أو `'تمت المعالجة'` أو `'تحت الإجراء'`.
    - **الإجراء**: إنهاء الفحص والانتقال للبلاغ التالي (`continue`).
 
-4. **الدخول إلى محرك المطابقة الآلي `matchReportToProject`** (`matchEngine.js: L253-527`):
+3. **فحص أحياء الصيانة المباشر** (`matchEngine.js: L808-866`) ← **الثالث**:
+   - يُستدعى `isDistrictInMaintenance(report.district, maintenanceDistricts)`.
+   - إذا وقعت إحداثيات البلاغ داخل مضلع أو خط مشروع نشط يُحال للمراجعة (`needsReview: true`, `reason: 'maintenance_district_inside_active_project'`).
+   - عدا ذلك:
+     - **النتيجة**: استبعاد قطعي مباشر (`matched: false`, `excluded: true`).
+     - **نسبة الثقة**: `confidence = 0`.
+     - **سبب الاستبعاد**: نص حرفي: ``حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)``.
+     - **التصنيف**: `actionCategory = 'تشغيل وصيانة'`.
+     - **الإجراء**: إنهاء الفحص فوراً للبلاغ بالانتقال للبلاغ التالي (`continue`).
+
+4. **فحص المقاول التابع للصيانة (Maintenance Contractor Check)** (`matchEngine.js: L868-895`) ← **الرابع (جديد)**:
+   - يُستدعى `checkMaintenanceContractor(effectiveContractor, report)`.
+   - إذا كان المقاول مصنفاً في `contractors_registry.json` كـ `department_type: 'maintenance'` (مع مراعاة الاستثناءات المكانية المعتمدة مثل مشروع العوالي #57 للأعمال المدنية ومشروع النرجس #59 للعرين):
+     - **النتيجة**: استبعاد قطعي مباشر (`matched: false`, `excluded: true`).
+     - **نسبة الثقة**: `confidence = 0`.
+     - **سبب الاستبعاد**: `reason = 'maintenance_contractor'`.
+     - **نص الاستبعاد**: النص الحرفي: ``المقاول ${report.contractorName} تابع لإدارة التشغيل والصيانة (ليس مشروعاً رأسمالياً)``.
+     - **التصنيف**: `actionCategory = 'تشغيل وصيانة'`.
+     - **الإجراء**: إنهاء الفحص والانتقال للبلاغ التالي (`continue`).
+
+5. **الدخول إلى محرك المطابقة الآلي `matchReportToProject`** (`matchEngine.js: L292-540`) ← **الخامس**:
    - **الخطوة 4.1: إعادة تأكيد فحص حي الصيانة داخل الدالة** (`matchEngine.js: L255-264`):
      - إذا كان الحي ضمن أحياء الصيانة:
        - **النتيجة**: استبعاد (`matched: false`, `excluded: true`).
