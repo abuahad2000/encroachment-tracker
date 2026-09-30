@@ -448,41 +448,114 @@ class ImportPipeline {
     const rawReportsPath = path.join(__dirname, '../../data/raw/reports_initial.json')
     const directReportsPath = path.join(__dirname, '../../data/reports.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
-    const reportsPath = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(rawReportsPath) ? rawReportsPath : directReportsPath)
+    const reportsPath = fs.existsSync(generatedReportsPath)
+      ? generatedReportsPath
+      : (fs.existsSync(rawReportsPath) ? rawReportsPath : directReportsPath)
 
-    const existingReports = fs.existsSync(reportsPath) 
-      ? JSON.parse(fs.readFileSync(reportsPath, 'utf8')) 
+    // ── تحميل البيانات القديمة ──
+    const existingReports = fs.existsSync(reportsPath)
+      ? JSON.parse(fs.readFileSync(reportsPath, 'utf8'))
       : []
 
-    const newIds = new Set(data.map(r => r.id).filter(Boolean))
-    const merged = [
-      ...existingReports.filter(r => !newIds.has(r.id)),
-      ...data
-    ]
+    const normalizeId = (id) =>
+      String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
 
+    // ── بناء خريطة البيانات القديمة بـ reportId كمفتاح ──
+    const existingMap = new Map()
+    for (const r of existingReports) {
+      const key = normalizeId(r.reportId || r.id)
+      if (key) existingMap.set(key, r)
+    }
+
+    // ── تطبيق Upsert على البيانات الجديدة ──
+    const merged = []
+    const processedIds = new Set()
+    let updatedCount = 0
+    let addedCount = 0
+
+    for (const newRow of data) {
+      const key = normalizeId(newRow.reportId || newRow.id)
+      if (!key) continue
+      processedIds.add(key)
+
+      if (existingMap.has(key)) {
+        const old = existingMap.get(key)
+        const hasStatusChange = old.status !== newRow.status
+        merged.push({
+          ...old,
+          ...newRow,
+          reportId: key,
+          lastUpdated: new Date().toISOString(),
+          isArchived: false,
+          statusChangeHistory: [
+            ...(old.statusChangeHistory || []),
+            ...(hasStatusChange ? [{
+              date: new Date().toISOString(),
+              oldStatus: old.status,
+              newStatus: newRow.status,
+              source: 'weekly_upload'
+            }] : [])
+          ]
+        })
+        updatedCount++
+      } else {
+        merged.push({
+          ...newRow,
+          reportId: key,
+          firstSeenDate: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          isArchived: false,
+          statusChangeHistory: [{
+            date: new Date().toISOString(),
+            oldStatus: null,
+            newStatus: newRow.status,
+            source: 'weekly_upload'
+          }]
+        })
+        addedCount++
+      }
+    }
+
+    // ── أرشفة البلاغات التي اختفت من الملف الجديد ──
+    let archivedCount = 0
+    for (const [key, old] of existingMap.entries()) {
+      if (!processedIds.has(key) && !old.isArchived) {
+        merged.push({
+          ...old,
+          isArchived: true,
+          archiveReason: 'لم يظهر في الملف الأسبوعي الحالي',
+          lastUpdated: new Date().toISOString()
+        })
+        archivedCount++
+      } else if (!processedIds.has(key) && old.isArchived) {
+        merged.push(old) // احتفظ بالمؤرشف القديم كما هو
+      }
+    }
+
+    console.log(`✅ Upsert: تحديث ${updatedCount} | إضافة ${addedCount} | أرشفة ${archivedCount} | الإجمالي ${merged.length}`)
+
+    // ── حفظ ──
     fs.writeFileSync(directReportsPath, JSON.stringify(merged, null, 2), 'utf8')
-
     if (fs.existsSync(path.dirname(generatedReportsPath))) {
       fs.writeFileSync(generatedReportsPath, JSON.stringify(merged, null, 2), 'utf8')
     }
 
-    // Update stats.json and managers.json so dashboard numbers and manager cards update immediately
+    // ── تحديث stats.json و managers.json ──
     const projectsPath = path.join(__dirname, '../../data/generated/projects.json')
     if (fs.existsSync(projectsPath)) {
       try {
         const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'))
-        const updatedStats = calculateStats(merged, projects)
-        const updatedManagers = createManagersData(projects, merged)
-        const statsPath = path.join(__dirname, '../../data/generated/stats.json')
-        const managersPath = path.join(__dirname, '../../data/generated/managers.json')
-        fs.writeFileSync(statsPath, JSON.stringify(updatedStats, null, 2), 'utf8')
-        fs.writeFileSync(managersPath, JSON.stringify(updatedManagers, null, 2), 'utf8')
+        const activeReports = merged.filter(r => !r.isArchived)
+        const updatedStats = calculateStats(activeReports, projects)
+        const updatedManagers = createManagersData(projects, activeReports)
+        fs.writeFileSync(path.join(__dirname, '../../data/generated/stats.json'), JSON.stringify(updatedStats, null, 2), 'utf8')
+        fs.writeFileSync(path.join(__dirname, '../../data/generated/managers.json'), JSON.stringify(updatedManagers, null, 2), 'utf8')
       } catch (e) {
-        console.error('Error recalculating stats and managers in importPipeline:', e)
+        console.error('Error recalculating stats:', e)
       }
     }
 
-    // تسجيل العملية
+    // ── تسجيل العملية ──
     const logPath = path.join(__dirname, '../../data/logs/import_logs.json')
     if (!fs.existsSync(path.dirname(logPath))) {
       fs.mkdirSync(path.dirname(logPath), { recursive: true })
@@ -494,10 +567,15 @@ class ImportPipeline {
       timestamp: new Date().toISOString(),
       fileName: options.fileName,
       uploadedBy: options.uploadedBy,
-      count: data.length
+      newInFile: data.length,
+      updated: updatedCount,
+      added: addedCount,
+      archived: archivedCount,
+      totalActive: merged.filter(r => !r.isArchived).length
     })
     fs.writeFileSync(logPath, JSON.stringify(logs, null, 2), 'utf8')
   }
+
 }
 
 export const pipeline = new ImportPipeline()
