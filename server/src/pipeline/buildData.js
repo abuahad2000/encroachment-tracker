@@ -210,7 +210,7 @@ export async function buildData(customReportsFile = null) {
     if (reports.rejectedRows) rejectedRows = reports.rejectedRows
     if (reports.nullDatesCount !== undefined) nullDatesCount = reports.nullDatesCount
 
-    return { success: true, stats, rejectedRows, nullDatesCount }
+    return { success: true, stats, rejectedRows, nullDatesCount, reports }
   } catch (err) {
     console.error('❌ خطأ في المعالجة:', err.message)
     throw err

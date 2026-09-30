@@ -202,8 +202,8 @@ export function parseReports(customFilePath = null) {
         latitude: rawLat ? Number(rawLat) : null,
         status: rawStatus ? String(rawStatus).trim() : 'تحت معالجة المقاول',
         city: getField(row, ['المدينة']) || 'مدينة الرياض',
-        district: getField(row, ['الحي']) || '',
-        street: getField(row, ['الشارع']) || '',
+        district: getField(row, ['الحي', 'اسم الحي', 'اسم_الحي', 'حي', 'district']) || '',
+        street: getField(row, ['اسم الشارع', 'اسم_الشارع', 'الشارع', 'street', 'Street']) || '',
         centerComment: getField(row, ['تعليق المركز', 'تعليق']) || '',
         conversationLog: String(rawConversations || '').split('|').map(s => s.trim()).filter(Boolean),
       })

@@ -672,17 +672,11 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
   for (const report of reports) {
     const isMaintenance = isMaintenanceReport(report)
     const rIdNorm = normalizeId(report.id)
-    const rLic = String(report.licenseNumber || '').trim()
 
-    // Find override strictly by normalized report ID (do not match on NULL or empty license numbers)
+    // مطابقة التعديلات اليدوية بـ reportId فقط
     const override = overrides?.find(o => {
       const oIdNorm = normalizeId(o.reportId)
-      if (oIdNorm && rIdNorm && oIdNorm === rIdNorm) return true
-      const oLic = String(o.licenseNumber || '').trim()
-      if (oLic && oLic.toUpperCase() !== 'NULL' && oLic !== '-' && oLic.length >= 6) {
-        if (rLic && rLic.toUpperCase() !== 'NULL' && oLic === rLic) return true
-      }
-      return false
+      return !!(oIdNorm && rIdNorm && oIdNorm === rIdNorm)
     })
 
     // ترتيب الفحص الجديد:

@@ -431,12 +431,33 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
     const xlsxDir = path.join(__dirname, '../../XLSX')
     const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
+    // قراءة معرفات البلاغات السابقة للمقارنة
+    const previousReportsPath = path.join(DATA_DIR, 'reports.json')
+    let previousReportIds = new Set()
+    if (fs.existsSync(previousReportsPath)) {
+      try {
+        const prev = JSON.parse(fs.readFileSync(previousReportsPath, 'utf8'))
+        if (Array.isArray(prev)) {
+          previousReportIds = new Set(prev.map(r => String(r.id).trim()).filter(Boolean))
+        }
+      } catch (e) {}
+    }
+
     console.log(`📤 جاري معالجة وتدقيق الملف الجديد بأمان: ${uploadedPath}`)
     const result = await buildData(uploadedPath)
 
     if (!result || !result.success) {
       throw new Error(result?.error || 'فشل في بناء ومعالجة البيانات من الملف المرفوع')
     }
+
+    // الاحتفاظ بنسخة مؤرخة من كل ملف إكسيل مرفوع (uploads/YYYY-MM-DD.xlsx) قبل الاستبدال
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const datedUploadPath = path.join(UPLOADS_DIR, `${dateStr}.xlsx`)
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+    }
+    fs.copyFileSync(uploadedPath, datedUploadPath)
 
     // بعد نجاح المعالجة بالكامل، نقوم باعتماد ملف الإكسيل كملف فعال
     if (!fs.existsSync(xlsxDir)) {
@@ -447,6 +468,30 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
       fs.unlinkSync(uploadedPath) // حذف الملف المؤقت المرفوع
     } catch (e) {}
 
+    // حساب إحصاءات المقارنة بالرفع السابق
+    const currentReports = result.reports || []
+    const currentReportIds = new Set(currentReports.map(r => String(r.id).trim()).filter(Boolean))
+
+    let newRowsCount = 0
+    for (const id of currentReportIds) {
+      if (!previousReportIds.has(id)) newRowsCount++
+    }
+
+    let disappearedCount = 0
+    for (const id of previousReportIds) {
+      if (!currentReportIds.has(id)) disappearedCount++
+    }
+
+    const previousTotal = previousReportIds.size
+    const currentTotal = currentReportIds.size
+    let warning = null
+    if (previousTotal > 0 && currentTotal < previousTotal) {
+      const dropPct = ((previousTotal - currentTotal) / previousTotal) * 100
+      if (dropPct > 10) {
+        warning = `تحذير: انخفض إجمالي عدد البلاغات بنسبة ${dropPct.toFixed(1)}% مقارنة بالرفع السابق (من ${previousTotal} إلى ${currentTotal} بلاغاً)`
+      }
+    }
+
     // إعادة توليد التقرير التنفيذي
     await runExecutiveExcelExport()
 
@@ -454,6 +499,10 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
       success: true,
       message: 'تم استلام ومعالجة الملف بنجاح وتحديث البيانات دون فقدان التعديلات السابقة',
       file: req.file.originalname,
+      rowsRead: currentReports.length,
+      newRowsCount,
+      disappearedCount,
+      warning,
       stats: result?.stats,
       nullDatesCount: result?.nullDatesCount || 0,
       rejectedRowsCount: result?.rejectedRows?.length || 0,
