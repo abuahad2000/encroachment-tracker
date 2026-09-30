@@ -1,17 +1,17 @@
 {
   "totalReports": 5300,
-  "totalActive": 30,
-  "pendingCount": 30,
-  "inProgressCount": 35,
-  "processedCount": 125,
-  "assignedCount": 190,
-  "excludedCount": 5036,
-  "matchedReports": 30,
-  "underProcessingCount": 30,
-  "archivedCount": 125,
-  "avgDelay": 176,
-  "medianDelay": 141,
-  "maxDelay": 654,
+  "totalActive": 22,
+  "pendingCount": 22,
+  "inProgressCount": 36,
+  "processedCount": 122,
+  "assignedCount": 180,
+  "excludedCount": 4972,
+  "matchedReports": 180,
+  "underProcessingCount": 22,
+  "archivedCount": 122,
+  "avgDelay": 113,
+  "medianDelay": 98,
+  "maxDelay": 406,
   "statusDistribution": {
     "تمت المعالجة": 1654,
     "معاد من المقاول": 259,
@@ -33,23 +33,19 @@
       "count": 8
     },
     {
-      "name": "تركي ظافر يحيى الاسمري",
-      "count": 5
+      "name": "عسكر لسلوم",
+      "count": 2
     },
     {
-      "name": "عسكر لسلوم",
-      "count": 4
+      "name": "تركي ظافر يحيى الاسمري",
+      "count": 2
     },
     {
       "name": "أمجد الفالح",
-      "count": 3
-    },
-    {
-      "name": "عبدالله علي العنزي",
       "count": 1
     }
   ],
-  "lastUpdate": "2026-09-29T19:01:26.997568Z",
+  "lastUpdate": "2026-09-30T17:09:28.104Z",
   "totalProjects": 122,
   "activeProjects": 73,
   "deliveredProjects": 41
