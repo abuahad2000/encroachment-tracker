@@ -1,17 +1,17 @@
 {
   "totalReports": 5300,
-  "totalActive": 18,
-  "pendingCount": 18,
+  "totalActive": 16,
+  "pendingCount": 16,
   "inProgressCount": 36,
   "processedCount": 121,
-  "assignedCount": 175,
+  "assignedCount": 173,
   "excludedCount": 5055,
-  "matchedReports": 175,
-  "underProcessingCount": 18,
+  "matchedReports": 173,
+  "underProcessingCount": 16,
   "archivedCount": 121,
-  "avgDelay": 93,
+  "avgDelay": 85,
   "medianDelay": 98,
-  "maxDelay": 314,
+  "maxDelay": 227,
   "statusDistribution": {
     "تمت المعالجة": 1654,
     "معاد من المقاول": 259,
@@ -29,10 +29,6 @@
       "count": 9
     },
     {
-      "name": "سعيد الحارث",
-      "count": 4
-    },
-    {
       "name": "عسكر لسلوم",
       "count": 2
     },
@@ -41,11 +37,15 @@
       "count": 2
     },
     {
+      "name": "سعيد الحارث",
+      "count": 2
+    },
+    {
       "name": "أمجد الفالح",
       "count": 1
     }
   ],
-  "lastUpdate": "2026-09-30T17:59:33.765Z",
+  "lastUpdate": "2026-09-30T18:00:57.198Z",
   "totalProjects": 122,
   "activeProjects": 73,
   "deliveredProjects": 41,

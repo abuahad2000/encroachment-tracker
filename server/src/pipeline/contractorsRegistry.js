@@ -23,9 +23,8 @@ export function loadContractorsRegistry() {
   }
 
   return {
-    metadata: {},
-    capitalContractors: [],
-    maintenanceContractors: []
+    _metadata: {},
+    contractors: []
   }
 }
 
@@ -35,26 +34,27 @@ export function reloadContractorsRegistry() {
 }
 
 /**
- * Checks if a contractor name matches an entry in registry by full name, clean name, or alias
+ * Checks if a contractor name matches an entry in registry
  */
-function matchesContractor(inputName, targetName, aliases = []) {
-  if (!inputName || !targetName) return false
+function matchesContractor(inputName, entry) {
+  if (!inputName || !entry) return false
   const normInput = normalizeArabic(inputName).toLowerCase().trim()
-  const normTarget = normalizeArabic(targetName).toLowerCase().trim()
   const cleanInput = cleanContractorName(inputName)
-  const cleanTarget = cleanContractorName(targetName)
 
-  if (normInput === normTarget || (cleanInput && cleanTarget && cleanInput === cleanTarget)) return true
-  if (normInput.includes(normTarget) || normTarget.includes(normInput)) return true
-  if (cleanInput && cleanTarget && (cleanInput.includes(cleanTarget) || cleanTarget.includes(cleanInput))) return true
+  const targets = [
+    entry.name,
+    entry.normalized_name,
+    entry.clean_name,
+    ...(entry.aliases || [])
+  ].filter(Boolean)
 
-  for (const alias of aliases) {
-    if (!alias) continue
-    const normAlias = normalizeArabic(alias).toLowerCase().trim()
-    const cleanAlias = cleanContractorName(alias)
-    if (normInput === normAlias || (cleanInput && cleanAlias && cleanInput === cleanAlias)) return true
-    if (normInput.includes(normAlias) || normAlias.includes(normInput)) return true
-    if (cleanInput && cleanAlias && (cleanInput.includes(cleanAlias) || cleanAlias.includes(cleanInput))) return true
+  for (const t of targets) {
+    const normTarget = normalizeArabic(t).toLowerCase().trim()
+    const cleanTarget = cleanContractorName(t)
+
+    if (normInput === normTarget || (cleanInput && cleanTarget && cleanInput === cleanTarget)) return true
+    if (normInput.includes(normTarget) || normTarget.includes(normInput)) return true
+    if (cleanInput && cleanTarget && (cleanInput.includes(cleanTarget) || cleanTarget.includes(cleanInput))) return true
   }
 
   return false
@@ -67,33 +67,51 @@ function matchesContractor(inputName, targetName, aliases = []) {
 export function checkMaintenanceContractor(contractorName, report = null) {
   if (!contractorName) return { isMaintenance: false }
   const reg = loadContractorsRegistry()
+  const contractors = reg.contractors || reg.maintenanceContractors || []
 
-  for (const mc of reg.maintenanceContractors || []) {
-    if (matchesContractor(contractorName, mc.name, mc.aliases)) {
-      // Check for exception rule (e.g. Civil Works for Al-Awali, or Al-Areen for Al-Narjis)
-      if (mc.exceptionRule) {
+  for (const c of contractors) {
+    const isMaint = c.department_type === 'maintenance' || c.classification === 'maintenance'
+    if (!isMaint) continue
+
+    if (matchesContractor(contractorName, c)) {
+      // Check for exception rules:
+      // 1. Civil Works (#57 Al-Awali)
+      if (c.id === 'MNT-001' || c.name.includes('الأعمال المدنية') || c.name.includes('الاعمال المدنية')) {
         const repDistrict = normalizeArabic(report?.district || '').toLowerCase()
         const repDesc = normalizeArabic((report?.description || '') + ' ' + (report?.centerComment || '')).toLowerCase()
-        const allowedDist = normalizeArabic(mc.exceptionRule.allowedDistrict || '').toLowerCase()
-
-        const matchesDistrict = repDistrict.includes(allowedDist) || repDesc.includes(allowedDist)
-        if (matchesDistrict) {
+        if (repDistrict.includes('عوالي') || repDesc.includes('عوالي')) {
           return {
             isMaintenance: false,
             isAllowedException: true,
-            allowedProjectId: mc.exceptionRule.allowedProjectId,
-            allowedDistrict: mc.exceptionRule.allowedDistrict,
-            notes: mc.exceptionRule.notes
+            allowedProjectId: '57',
+            allowedDistrict: 'العوالي',
+            notes: 'مشروع العوالي #57 استثناء معتمد'
+          }
+        }
+      }
+
+      // 2. Al-Areen (Al-Narjis #59)
+      if (c.id === 'MNT-012' || c.name.includes('العرين')) {
+        const repDistrict = normalizeArabic(report?.district || '').toLowerCase()
+        const repDesc = normalizeArabic((report?.description || '') + ' ' + (report?.centerComment || '')).toLowerCase()
+        if (repDistrict.includes('نرجس') || repDesc.includes('نرجس')) {
+          return {
+            isMaintenance: false,
+            isAllowedException: true,
+            allowedProjectId: '59',
+            allowedDistrict: 'النرجس',
+            notes: 'مشروع شبكات مياه النرجس #59 تحت م. عبدالله الأسود استثناء معتمد'
           }
         }
       }
 
       return {
         isMaintenance: true,
-        contractorName: mc.name,
+        contractorId: c.id,
+        contractorName: c.name,
         reason: 'maintenance_contractor',
-        scope: mc.maintenanceScope || 'تشغيل وصيانة',
-        excludedReason: `المقاول (${mc.name}) تابع لإدارة التشغيل والصيانة وليس للمشاريع الرأسمالية (${mc.maintenanceScope || 'صيانة وتوصيلات'})`
+        category: c.category || 'تشغيل وصيانة',
+        excludedReason: `المقاول (${c.name}) تابع لإدارة التشغيل والصيانة وليس للمشاريع الرأسمالية (${c.notes || c.category || 'تشغيل وصيانة'})`
       }
     }
   }
@@ -107,10 +125,18 @@ export function checkMaintenanceContractor(contractorName, report = null) {
 export function checkCapitalContractor(contractorName) {
   if (!contractorName) return null
   const reg = loadContractorsRegistry()
+  const contractors = reg.contractors || reg.capitalContractors || []
 
-  for (const cc of reg.capitalContractors || []) {
-    if (matchesContractor(contractorName, cc.name, cc.aliases)) {
-      return cc
+  for (const c of contractors) {
+    const isCapital = c.department_type === 'capital_project' || c.classification === 'capital'
+    if (!isCapital) continue
+
+    if (matchesContractor(contractorName, c)) {
+      return {
+        ...c,
+        programManagers: c.approved_program_managers || c.programManagers || [],
+        projects: c.linked_project_ids || c.projects || []
+      }
     }
   }
 
