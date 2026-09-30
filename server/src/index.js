@@ -651,12 +651,6 @@ app.post('/api/override', async (req, res) => {
   }
 
   safeWriteJsonSync(overridesPath, overrides)
-  // Backup file for permanent persistence (uses overridesBackupPath declared above)
-  try {
-    safeWriteJsonSync(overridesBackupPath, overrides)
-  } catch (e) {
-    console.warn('Warning backing up overrides:', e.message)
-  }
 
   // Update reports.json, stats.json, and managers.json immediately
   let updatedReport = null
@@ -836,7 +830,6 @@ app.post('/api/reports/assign', async (req, res) => {
       overrides.push(overrideEntry)
     }
     safeWriteJsonSync(overridesPath, overrides)
-    safeWriteJsonSync(overridesBackupPath, overrides)
   } catch (e) {
     console.warn('Error saving assignment override:', e.message)
   }
@@ -923,7 +916,6 @@ app.post('/api/unassign-project', async (req, res) => {
         overrides.push(overrideEntry)
       }
       safeWriteJsonSync(overridesPath, overrides)
-      safeWriteJsonSync(overridesBackupPath, overrides)
     } catch (e) {
       console.warn('Error saving unassign override:', e.message)
     }
@@ -1176,37 +1168,24 @@ function saveContractorDirectory(data) {
   const dir = path.dirname(contractorDirectoryPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(contractorDirectoryPath, JSON.stringify(data, null, 2))
-  try {
-    fs.writeFileSync(contractorDirectoryBackupPath, JSON.stringify(data, null, 2))
-  } catch (e) {
-    console.error('Error saving contractor_directory_backup:', e.message)
-  }
 }
 
 function loadContractorProfiles() {
+  const profilesPath = path.join(DATA_DIR, 'generated/contractor_profiles.json')
   let profiles = {}
-  if (fs.existsSync(contractorProfilesBackupPath)) {
+  if (fs.existsSync(profilesPath)) {
     try {
-      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(contractorProfilesBackupPath, 'utf-8')) }
-    } catch (e) {}
-  }
-  if (fs.existsSync(contractorProfilesPath)) {
-    try {
-      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(contractorProfilesPath, 'utf-8')) }
+      profiles = { ...profiles, ...JSON.parse(fs.readFileSync(profilesPath, 'utf-8')) }
     } catch (e) {}
   }
   return profiles
 }
 
 function saveContractorProfiles(data) {
-  const dir = path.dirname(contractorProfilesPath)
+  const profilesPath = path.join(DATA_DIR, 'generated/contractor_profiles.json')
+  const dir = path.dirname(profilesPath)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(contractorProfilesPath, JSON.stringify(data, null, 2))
-  try {
-    fs.writeFileSync(contractorProfilesBackupPath, JSON.stringify(data, null, 2))
-  } catch (e) {
-    console.error('Error saving contractor_profiles_backup:', e.message)
-  }
+  fs.writeFileSync(profilesPath, JSON.stringify(data, null, 2))
 }
 
 // Get contractor directory

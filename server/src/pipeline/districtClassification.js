@@ -39,15 +39,10 @@ export function loadMaintenanceDistricts() {
 // حفظ قائمة أحياء الصيانة
 export function saveMaintenanceDistricts(districtsList) {
   try {
-    const dataDir = path.dirname(maintenanceDistrictsPath)
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
-    const backupDir = path.join(dataDir, 'backups')
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true })
-
+    const refDir = path.dirname(maintenanceDistrictsRefPath)
+    if (!fs.existsSync(refDir)) fs.mkdirSync(refDir, { recursive: true })
     const content = JSON.stringify(districtsList, null, 2)
-    fs.writeFileSync(maintenanceDistrictsPath, content, 'utf-8')
-    fs.writeFileSync(maintenanceDistrictsBackupPath, content, 'utf-8')
-    fs.writeFileSync(path.join(backupDir, 'maintenance_districts_backup.json'), content, 'utf-8')
+    fs.writeFileSync(maintenanceDistrictsRefPath, content, 'utf-8')
     return true
   } catch (err) {
     console.error('Error saving maintenance districts:', err)

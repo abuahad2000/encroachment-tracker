@@ -69,21 +69,8 @@ export async function buildData(customReportsFile = null) {
 
     // 2. Load overrides & contractors config
     const overridesPath = path.join(DATA_DIR, 'overrides.json')
-    const overridesBackupPath = path.join(DATA_DIR, 'overrides_backup.json')
     const normalizeId = (id) => String(id ?? '').trim().replace(/^0+/, '') || String(id ?? '').trim()
     const overridesMap = new Map()
-
-    if (fs.existsSync(overridesBackupPath)) {
-      try {
-        const b = JSON.parse(fs.readFileSync(overridesBackupPath, 'utf-8'))
-        if (Array.isArray(b)) {
-          b.forEach(o => {
-            const k = normalizeId(o.reportId)
-            if (k) overridesMap.set(k, o)
-          })
-        }
-      } catch (e) {}
-    }
 
     if (fs.existsSync(overridesPath)) {
       try {
@@ -518,9 +505,6 @@ export function syncContractorDirectory(projects) {
     const dataDir = path.dirname(dirPath)
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
     fs.writeFileSync(dirPath, JSON.stringify(updatedDirectory, null, 2))
-    fs.writeFileSync(backupDirPath, JSON.stringify(updatedDirectory, null, 2))
-    fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2))
-    fs.writeFileSync(backupProfilesPath, JSON.stringify(profiles, null, 2))
     console.log(`📁 تم مزامنة وتأمين بيانات جدول المقاولين (${updatedDirectory.length} سجل)`)
   } catch (e) {
     console.error('Error saving synchronized contractor directory:', e.message)
