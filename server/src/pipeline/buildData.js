@@ -7,6 +7,7 @@ import { parseAllKMZ } from './parseKmz.js'
 import { processReports } from './matchEngine.js'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 import { buildDistrictsClassification } from './districtClassification.js'
+import { mergeWeeklyReports } from './mergeReports.js'
 import { DATA_DIR } from '../config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -143,14 +144,22 @@ export async function buildData(customReportsFile = null) {
       }
     }
 
-    const disappearedHistoricalReports = []
-    if (previousReports.length > 0 && reports.length > 0 && customReportsFile) {
+    let allReportsToProcess = reports
+    let archivedCount = 0
+
+    if (customReportsFile && reports.length > 0 && fs.existsSync(directReportsPath)) {
+      console.log('🔄 تطبيق دالة الدمج الذكي mergeWeeklyReports...')
+      allReportsToProcess = await mergeWeeklyReports(reports, directReportsPath)
+      archivedCount = allReportsToProcess.filter(r => r.isArchived || r.archived).length
+    } else if (previousReports.length > 0 && reports.length > 0 && customReportsFile) {
+      const disappearedHistoricalReports = []
       for (const prevR of previousReports) {
-        const pId = normalizeId(prevR.id)
+        const pId = normalizeId(prevR.id || prevR.reportId)
         if (pId && !incomingReportIds.has(pId)) {
           disappearedHistoricalReports.push({
             ...prevR,
             isHistorical: true,
+            isArchived: true,
             disappearedFromWeekly: true,
             archived: true,
             historicalNote: 'بلاغ تاريخي محفوظ: اختفى من التقرير الأسبوعي الأحدث'
@@ -160,14 +169,14 @@ export async function buildData(customReportsFile = null) {
       if (disappearedHistoricalReports.length > 0) {
         console.log(`🛡️ [الدمج الأسبوعي الآمن]: تم الحفاظ على ${disappearedHistoricalReports.length} بلاغ تاريخي اختفى من الملف الأسبوعي الجديد`)
       }
+      allReportsToProcess = [...reports, ...disappearedHistoricalReports]
+      archivedCount = disappearedHistoricalReports.length
     }
-
-    const allReportsToProcess = [...reports, ...disappearedHistoricalReports]
 
     console.log('⚙️  جاري معالجة ومطابقة البلاغات...')
     const processedReports = processReports(allReportsToProcess, projects, geoJsonData, overrides, contractorsConfig)
     const stats = calculateStats(processedReports, projects)
-    stats.historicalCount = disappearedHistoricalReports.length
+    stats.historicalCount = archivedCount
     stats.weeklyIncomingCount = reports.length
     const managers = createManagersData(projects, processedReports)
 
