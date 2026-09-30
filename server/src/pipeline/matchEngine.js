@@ -865,11 +865,36 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       continue
     }
 
-    // (4) باقي المحرك
+    // (4) فحص المقاول: هل المقاول تابع لإدارة التشغيل والصيانة؟
     const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')
       ? String(override.customContractor).trim()
       : report.contractorName
 
+    const maintCheck = checkMaintenanceContractor(effectiveContractor, report)
+    if (maintCheck.isMaintenance) {
+      const ageInfo = computeAgeDays(report, processingDate)
+      const cls = classifyReportSectorFromText(report)
+      processed.push({
+        ...report,
+        contractorName: effectiveContractor,
+        matched: false,
+        excluded: true,
+        project: null,
+        programManager: null,
+        confidence: 0,
+        reason: 'maintenance_contractor',
+        exclusionReason: `المقاول ${effectiveContractor || ''} تابع لإدارة التشغيل والصيانة (ليس مشروعاً رأسمالياً)`,
+        excludedReason: `المقاول ${effectiveContractor || ''} تابع لإدارة التشغيل والصيانة (ليس مشروعاً رأسمالياً)`,
+        actionCategory: 'تشغيل وصيانة',
+        isMaintenance: true,
+        sector: cls,
+        ageDays: ageInfo.ageDays,
+        ...(ageInfo.missingDate ? { missingDate: true } : {})
+      })
+      continue
+    }
+
+    // (5) باقي المحرك
     const reportToMatch = {
       ...report,
       contractorName: effectiveContractor
