@@ -445,9 +445,10 @@ class ImportPipeline {
   }
 
   async stage6_save(data, options) {
+    const rawReportsPath = path.join(__dirname, '../../data/raw/reports_initial.json')
     const directReportsPath = path.join(__dirname, '../../data/reports.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
-    const reportsPath = fs.existsSync(directReportsPath) ? directReportsPath : generatedReportsPath
+    const reportsPath = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(rawReportsPath) ? rawReportsPath : directReportsPath)
 
     const existingReports = fs.existsSync(reportsPath) 
       ? JSON.parse(fs.readFileSync(reportsPath, 'utf8')) 
@@ -482,8 +483,13 @@ class ImportPipeline {
     }
 
     // تسجيل العملية
-    const logPath = path.join(__dirname, '../../data/import_logs.json')
-    const logs = fs.existsSync(logPath) ? JSON.parse(fs.readFileSync(logPath, 'utf8')) : []
+    const logPath = path.join(__dirname, '../../data/logs/import_logs.json')
+    if (!fs.existsSync(path.dirname(logPath))) {
+      fs.mkdirSync(path.dirname(logPath), { recursive: true })
+    }
+    const legacyLogPath = path.join(__dirname, '../../data/import_logs.json')
+    const actualLogPath = fs.existsSync(logPath) ? logPath : (fs.existsSync(legacyLogPath) ? legacyLogPath : logPath)
+    const logs = fs.existsSync(actualLogPath) ? JSON.parse(fs.readFileSync(actualLogPath, 'utf8')) : []
     logs.push({
       timestamp: new Date().toISOString(),
       fileName: options.fileName,

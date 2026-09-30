@@ -11,9 +11,10 @@ router.post('/unassign-project', async (req, res) => {
   try {
     const { reportId, managerName } = req.body
 
-    const directReportsPath = path.join(__dirname, '../../data/reports.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
-    const reportsPath = fs.existsSync(directReportsPath) ? directReportsPath : generatedReportsPath
+    const rawReportsPath = path.join(__dirname, '../../data/raw/reports_initial.json')
+    const directReportsPath = path.join(__dirname, '../../data/reports.json')
+    const reportsPath = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(rawReportsPath) ? rawReportsPath : directReportsPath)
 
     if (!fs.existsSync(reportsPath)) {
       return res.status(404).json({ error: 'ملف التقارير غير موجود' })

@@ -436,11 +436,13 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
     const uploadedReportsCopy = path.join(xlsxDir, 'reports.xlsx')
 
     // قراءة معرفات البلاغات السابقة للمقارنة
-    const previousReportsPath = path.join(DATA_DIR, 'reports.json')
+    const previousReportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const rawReportsPath = path.join(DATA_DIR, 'raw/reports_initial.json')
+    const prevReportsFile = fs.existsSync(previousReportsPath) ? previousReportsPath : (fs.existsSync(rawReportsPath) ? rawReportsPath : path.join(DATA_DIR, 'reports.json'))
     let previousReportIds = new Set()
-    if (fs.existsSync(previousReportsPath)) {
+    if (fs.existsSync(prevReportsFile)) {
       try {
-        const prev = JSON.parse(fs.readFileSync(previousReportsPath, 'utf8'))
+        const prev = JSON.parse(fs.readFileSync(prevReportsFile, 'utf8'))
         if (Array.isArray(prev)) {
           previousReportIds = new Set(prev.map(r => String(r.id).trim()).filter(Boolean))
         }

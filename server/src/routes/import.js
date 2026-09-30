@@ -49,14 +49,17 @@ router.post(['/import-excel', '/excel'], upload.single('file'), async (req, res)
     const backupPath = path.join(__dirname, '../../data/backups')
     if (!fs.existsSync(backupPath)) fs.mkdirSync(backupPath, { recursive: true })
 
+    const rawReportsPath = path.join(__dirname, '../../data/raw/reports_initial.json')
     const reportsPath = path.join(__dirname, '../../data/reports.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
     const backupName = `reports_backup_${Date.now()}.json`
 
-    if (fs.existsSync(reportsPath)) {
-      fs.copyFileSync(reportsPath, path.join(backupPath, backupName))
-    } else if (fs.existsSync(generatedReportsPath)) {
+    if (fs.existsSync(generatedReportsPath)) {
       fs.copyFileSync(generatedReportsPath, path.join(backupPath, backupName))
+    } else if (fs.existsSync(rawReportsPath)) {
+      fs.copyFileSync(rawReportsPath, path.join(backupPath, backupName))
+    } else if (fs.existsSync(reportsPath)) {
+      fs.copyFileSync(reportsPath, path.join(backupPath, backupName))
     }
 
     // تنفيذ الـ Pipeline
@@ -88,10 +91,12 @@ router.post(['/import-rollback', '/rollback'], async (req, res) => {
 
     const latestBackup = files[0]
     const backupFile = path.join(backupPath, latestBackup)
-    const reportsPath = path.join(__dirname, '../../data/reports.json')
+    const rawReportsPath = path.join(__dirname, '../../data/raw/reports_initial.json')
     const generatedReportsPath = path.join(__dirname, '../../data/generated/reports.json')
 
-    fs.copyFileSync(backupFile, reportsPath)
+    if (fs.existsSync(path.dirname(rawReportsPath))) {
+      fs.copyFileSync(backupFile, rawReportsPath)
+    }
     if (fs.existsSync(path.dirname(generatedReportsPath))) {
       fs.copyFileSync(backupFile, generatedReportsPath)
     }

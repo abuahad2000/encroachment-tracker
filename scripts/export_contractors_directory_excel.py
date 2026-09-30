@@ -6,7 +6,9 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIRECTORY_FILE = os.path.join(BASE_DIR, 'server', 'data', 'contractor_directory.json')
+gen_dir = os.path.join(BASE_DIR, 'server', 'data', 'generated', 'contractor_directory.json')
+legacy_dir = os.path.join(BASE_DIR, 'server', 'data', 'contractor_directory.json')
+DIRECTORY_FILE = gen_dir if os.path.exists(gen_dir) else legacy_dir
 BACKUP_DIRECTORY_FILE = os.path.join(BASE_DIR, 'server', 'data', 'contractor_directory_backup.json')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'XLSX')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
