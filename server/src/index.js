@@ -443,6 +443,24 @@ app.post('/api/upload-reports', upload.single('file'), async (req, res) => {
       } catch (e) {}
     }
 
+    // ✅ امسح فقط الملفات المولدة، ولا تلمس المراجع أو التعديلات
+    const filesToReset = [
+      path.join(DATA_DIR, 'generated/reports.json'),
+      path.join(DATA_DIR, 'generated/stats.json'),
+      path.join(DATA_DIR, 'generated/managers.json')
+    ]
+
+    filesToReset.forEach(file => {
+      if (fs.existsSync(file)) {
+        fs.writeFileSync(file, '[]', 'utf8')
+      }
+    })
+
+    // ❌ ممنوع تماماً:
+    // - fs.writeFileSync('server/data/overrides.json', ...)
+    // - fs.writeFileSync('server/data/overrides_backup.json', ...)
+    // - أي ملف في server/data/reference/
+
     console.log(`📤 جاري معالجة وتدقيق الملف الجديد بأمان: ${uploadedPath}`)
     const result = await buildData(uploadedPath)
 
