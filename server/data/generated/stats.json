@@ -1,16 +1,16 @@
 {
   "totalReports": 5300,
-  "totalActive": 16,
-  "pendingCount": 16,
+  "totalActive": 14,
+  "pendingCount": 14,
   "inProgressCount": 36,
   "processedCount": 121,
-  "assignedCount": 173,
-  "excludedCount": 5055,
-  "matchedReports": 173,
-  "underProcessingCount": 16,
+  "assignedCount": 171,
+  "excludedCount": 5003,
+  "matchedReports": 171,
+  "underProcessingCount": 14,
   "archivedCount": 121,
-  "avgDelay": 85,
-  "medianDelay": 98,
+  "avgDelay": 95,
+  "medianDelay": 100,
   "maxDelay": 227,
   "statusDistribution": {
     "تمت المعالجة": 1654,
@@ -37,15 +37,11 @@
       "count": 2
     },
     {
-      "name": "سعيد الحارث",
-      "count": 2
-    },
-    {
       "name": "أمجد الفالح",
       "count": 1
     }
   ],
-  "lastUpdate": "2026-09-30T18:06:55.274Z",
+  "lastUpdate": "2026-09-30T18:59:05.761Z",
   "totalProjects": 122,
   "activeProjects": 73,
   "deliveredProjects": 41,

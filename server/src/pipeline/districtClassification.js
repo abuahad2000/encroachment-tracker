@@ -8,12 +8,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { DATA_DIR } from '../config.js'
 
 // مسارات ملفات أحياء الصيانة
+const maintenanceDistrictsRefPath = path.join(DATA_DIR, 'reference/maintenance_districts.json')
 const maintenanceDistrictsPath = path.join(DATA_DIR, 'maintenance_districts.json')
 const maintenanceDistrictsBackupPath = path.join(DATA_DIR, 'maintenance_districts_backup.json')
 
 // تحميل قائمة أحياء الصيانة المعتمدة
 export function loadMaintenanceDistricts() {
   try {
+    if (fs.existsSync(maintenanceDistrictsRefPath)) {
+      const content = fs.readFileSync(maintenanceDistrictsRefPath, 'utf-8')
+      const parsed = JSON.parse(content)
+      if (Array.isArray(parsed)) return parsed
+    }
     if (fs.existsSync(maintenanceDistrictsPath)) {
       const content = fs.readFileSync(maintenanceDistrictsPath, 'utf-8')
       const parsed = JSON.parse(content)

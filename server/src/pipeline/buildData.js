@@ -41,10 +41,12 @@ export async function buildData(customReportsFile = null) {
     } else {
       console.warn(`⚠️ ملف الإكسيل غير موجود في: ${targetFile}`)
       const generatedReportsPath = path.join(DATA_DIR, 'generated/reports.json')
+      const rawReportsPath = path.join(DATA_DIR, 'raw/reports_initial.json')
       const directReportsPath = path.join(DATA_DIR, 'reports.json')
 
       let sourcePath = null
       if (fs.existsSync(generatedReportsPath)) sourcePath = generatedReportsPath
+      else if (fs.existsSync(rawReportsPath)) sourcePath = rawReportsPath
       else if (fs.existsSync(directReportsPath)) sourcePath = directReportsPath
 
       if (sourcePath) {
@@ -130,8 +132,9 @@ export async function buildData(customReportsFile = null) {
     const incomingReportIds = new Set(reports.map(r => normalizeId(r.id)).filter(Boolean))
     let previousReports = []
     const generatedReportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const rawReportsPath = path.join(DATA_DIR, 'raw/reports_initial.json')
     const directReportsPath = path.join(DATA_DIR, 'reports.json')
-    const prevSource = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(directReportsPath) ? directReportsPath : null)
+    const prevSource = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(rawReportsPath) ? rawReportsPath : (fs.existsSync(directReportsPath) ? directReportsPath : null))
 
     if (prevSource && (customReportsFile || fs.existsSync(targetFile))) {
       try {
@@ -396,7 +399,7 @@ export function createManagersData(projects, reports) {
 }
 
 export function syncContractorDirectory(projects) {
-  const dirPath = path.join(__dirname, '../../data/contractor_directory.json')
+  const dirPath = path.join(__dirname, '../../data/generated/contractor_directory.json')
   const backupDirPath = path.join(__dirname, '../../data/contractor_directory_backup.json')
   const profilesPath = path.join(__dirname, '../../data/contractor_profiles.json')
   const backupProfilesPath = path.join(__dirname, '../../data/contractor_profiles_backup.json')

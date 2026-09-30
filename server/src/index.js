@@ -42,7 +42,8 @@ export function triggerFullRecalculation() {
     }
 
     // قراءة مقاولي الدليل
-    const dirPath = path.join(DATA_DIR, 'contractor_directory.json')
+    const genDirPath = path.join(DATA_DIR, 'generated/contractor_directory.json')
+    const dirPath = fs.existsSync(genDirPath) ? genDirPath : path.join(DATA_DIR, 'contractor_directory.json')
     let contractorsConfig = null
     if (fs.existsSync(dirPath)) {
       try { contractorsConfig = JSON.parse(fs.readFileSync(dirPath, 'utf-8')) } catch (e) {}
@@ -50,10 +51,13 @@ export function triggerFullRecalculation() {
 
     // قراءة البلاغات الموجودة
     const reportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const rawReportsPath = path.join(DATA_DIR, 'raw/reports_initial.json')
     const directReportsPath = path.join(DATA_DIR, 'reports.json')
     let rawReports = []
     if (fs.existsSync(reportsPath)) {
       try { rawReports = JSON.parse(fs.readFileSync(reportsPath, 'utf-8')) } catch (e) {}
+    } else if (fs.existsSync(rawReportsPath)) {
+      try { rawReports = JSON.parse(fs.readFileSync(rawReportsPath, 'utf-8')) } catch (e) {}
     } else if (fs.existsSync(directReportsPath)) {
       try { rawReports = JSON.parse(fs.readFileSync(directReportsPath, 'utf-8')) } catch (e) {}
     }
@@ -1121,7 +1125,8 @@ app.post('/api/contractors', async (req, res) => {
 })
 
 // ===== Contractor Directory Endpoints =====
-const contractorDirectoryPath = path.join(DATA_DIR, 'contractor_directory.json')
+const genContractorDir = path.join(DATA_DIR, 'generated/contractor_directory.json')
+const contractorDirectoryPath = fs.existsSync(genContractorDir) ? genContractorDir : path.join(DATA_DIR, 'contractor_directory.json')
 const contractorDirectoryBackupPath = path.join(DATA_DIR, 'contractor_directory_backup.json')
 const contractorProfilesPath = path.join(DATA_DIR, 'contractor_profiles.json')
 const contractorProfilesBackupPath = path.join(DATA_DIR, 'contractor_profiles_backup.json')
