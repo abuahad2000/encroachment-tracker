@@ -51,32 +51,50 @@ export function isContractorCompatibleWithManager(reportContractor, programManag
   return matchContractor(reportContractor, managerContractors)
 }
 
+export function isValidSaudiCoords(lng, lat) {
+  if (lng === null || lng === undefined || lng === '' || lat === null || lat === undefined || lat === '') return false
+  const nLng = Number(lng)
+  const nLat = Number(lat)
+  if (isNaN(nLng) || isNaN(nLat)) return false
+  if (nLng === 0 && nLat === 0) return false
+  return (nLng >= 34 && nLng <= 56 && nLat >= 16 && nLat <= 33)
+}
+
+export function contractorMatchesTokens(contractorName, targetTokens) {
+  if (!contractorName) return false
+  const norm = normalizeArabic(contractorName).toLowerCase()
+  const tokens = norm.split(/\s+/).filter(Boolean)
+  return tokens.some(t => {
+    const unal = t.startsWith('ال') ? t.slice(2) : t
+    return targetTokens.includes(t) || targetTokens.includes(unal)
+  })
+}
+
 // فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
 export function getCityWideMiscContractorProject(report, activeProjects) {
   const cName = report.contractorName
   if (!hasValidContractor(cName)) return null
-  const norm = normalizeArabic(cName).toLowerCase()
 
   // 1. الاومير -> عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض (عقد رقم 26) - Project #62
-  if (norm.includes('اومير') || norm.includes('أومير')) {
-    const p = activeProjects.find(pr => String(pr.id) === '62' || (pr.name?.includes('26') && pr.contractor?.includes('الاومير')))
+  if (contractorMatchesTokens(cName, ['اومير', 'الاولمير'])) {
+    const p = activeProjects.find(pr => String(pr.id) === '62' || (pr.name?.includes('26') && contractorMatchesTokens(pr.contractor, ['اومير', 'الاولمير'])))
     if (p) return p
   }
 
   // 2. العيسى -> تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض – عقد رقم 26 – المرحلة الثالثة - Project #60
-  if (norm.includes('عيسى') || norm.includes('عيسي')) {
-    const p = activeProjects.find(pr => String(pr.id) === '60' || (pr.name?.includes('المرحلة الثالثة') && pr.contractor?.includes('العيسى')))
+  if (contractorMatchesTokens(cName, ['عيسي', 'عيسى'])) {
+    const p = activeProjects.find(pr => String(pr.id) === '60' || (pr.name?.includes('المرحلة الثالثة') && contractorMatchesTokens(pr.contractor, ['عيسي', 'عيسى'])))
     if (p) return p
   }
 
   // 3. النمال -> عقد تنفيذ خطوط صرف صحي متفرقة بمدينة الرياض -عقد 26 المرحلة الرابعة - Project #61
-  if (norm.includes('نمال')) {
-    if (report.longitude && report.latitude) {
-      const pt = [report.longitude, report.latitude]
+  if (contractorMatchesTokens(cName, ['نمال'])) {
+    if (isValidSaudiCoords(report.longitude, report.latitude)) {
+      const pt = [Number(report.longitude), Number(report.latitude)]
 
       // أ. إذا كان البلاغ يقع جغرافياً داخل أحد مشاريع النمال المحددة (مثل الملقا أو العارض)، يُعطى الأولوية للمشروع المحدد
       const specificNimalProjects = activeProjects.filter(pr => 
-        pr.contractor?.includes('النمال') && 
+        contractorMatchesTokens(pr.contractor, ['نمال']) && 
         !pr.scope?.includes('شامل') && 
         pr._kmzFeatures?.length > 0
       )
@@ -89,7 +107,7 @@ export function getCityWideMiscContractorProject(report, activeProjects) {
       }
 
       // ب. التحقق من الوقوع على خطوط طبقة النمال المعتمدة (عقد 26 المرحلة الرابعة - المشروع #61)
-      const p61 = activeProjects.find(pr => String(pr.id) === '61' || (pr.name?.includes('المرحلة الرابعة') && pr.contractor?.includes('النمال')))
+      const p61 = activeProjects.find(pr => String(pr.id) === '61' || (pr.name?.includes('المرحلة الرابعة') && contractorMatchesTokens(pr.contractor, ['نمال'])))
       if (p61 && p61._kmzFeatures?.length > 0) {
         for (const feat of p61._kmzFeatures) {
           if (pointInBounds(pt, feat.geometry, feat._bbox)) {
@@ -250,23 +268,19 @@ function matchProjectToFeature(project, feat) {
   return true
 }
 
-export function matchReportToProject(report, activeProjects, contractorsConfig, maintenanceDistricts = null) {
-  // فحص مباشر: إذا كان الحي مصنف ضمن أحياء الصيانة، يُستبعد فوراً دون ربطه بأي مشروع رأسمالي
-  if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
-    return {
-      matched: false,
-      excluded: true,
-      excludedReason: `حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
-      confidence: 0,
-      reason: 'maintenance_district',
-      actionCategory: 'تشغيل وصيانة'
-    }
-  }
+export function getFeatureSector(feat, project) {
+  const folder = feat?.properties?.folder || ''
+  if (folder.includes('اسبستوس')) return 'مياه'
+  const sec = feat?.properties?.sector
+  if (sec === 'water') return 'مياه'
+  if (sec === 'sanitation') return 'صرف'
+  return getProjectSector(project)
+}
 
+export function matchReportToProject(report, activeProjects, contractorsConfig, maintenanceDistricts = null) {
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
   // 1. فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
-  // هؤلاء المقاولون عقودهم شاملة مدينة الرياض ولا ترتبط بنطاق مكاني محدد، ويتبعون م. عبدالله الأسود
   const miscProject = getCityWideMiscContractorProject(report, activeProjects)
   if (miscProject) {
     return {
@@ -294,17 +308,19 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
   }
 
   const candidates = []
-  const hasCoords = report.longitude && report.latitude && report.longitude !== 0 && report.latitude !== 0
-  const point = hasCoords ? [report.longitude, report.latitude] : null
+  const hasCoords = isValidSaudiCoords(report.longitude, report.latitude)
+  const point = hasCoords ? [Number(report.longitude), Number(report.latitude)] : null
   const isGovReport = report.city && !report.city.includes('الرياض')
   const reportSector = report.sector || classifyReportSectorFromText(report)
 
-  // متغيرات لتتبع سبب الاستبعاد عند وجود تقاطع مكاني
+  // متغيرات لتتبع سبب الاستبعاد أو المراجعة عند وجود تقاطع مكاني
   let hasAnySpatialMatch = false
   let rejectedDueToSewerWaterMismatch = false
+  let rejectedDueToWaterSewerMismatch = false
   let rejectedDueToContractorManagerMismatch = false
+  let suggestedProjectOnManagerMismatch = null
 
-  // 1. الفحص المكاني الصارم: البحث عن الطبقات الجارية التي تحتوي النقطة جغرافياً
+  // 1. الفحص المكاني: البحث عن الطبقات الجارية التي تحتوي النقطة جغرافياً
   if (point) {
     for (const project of activeProjects) {
       if (project._kmzFeatures?.length > 0) {
@@ -312,22 +328,32 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
           if (pointInBounds(point, feat.geometry, feat._bbox)) {
             hasAnySpatialMatch = true
 
-            // قاعدة 2: إذا كان المشروع صرف وله نطاق معين والبلاغ مياه يُستبعد مباشرة
-            const projSector = getProjectSector(project)
+            // نوع الخدمة للنطاق يؤخذ من مجلد KMZ (water أو sanitation، والاسبستوس water). لا تعتمد على اسم المشروع في YAML إلا إذا لم يكن للعنصر قطاع
+            const featSector = getFeatureSector(feat, project)
             const isSpecificScope = project.scope && 
               !project.scope.includes('شامل') && 
               !project.subProgram?.includes('المتفرقات')
 
-            if (projSector === 'صرف' && isSpecificScope && reportSector === 'مياه') {
+            // بلاغ مياه داخل نطاق صرف ذي نطاق محدد
+            if (featSector === 'صرف' && isSpecificScope && reportSector === 'مياه') {
               rejectedDueToSewerWaterMismatch = true
               continue
             }
 
-            // قاعدة 1: إذا كان المقاول بملف التعديات المستورد لا يتوافق مع مدير البرنامج اجعله مستبعداً مباشرة
+            // بلاغ صرف داخل نطاق مياه ذي نطاق محدد
+            if (featSector === 'مياه' && isSpecificScope && reportSector === 'صرف') {
+              rejectedDueToWaterSewerMismatch = true
+              continue
+            }
+
+            // فحص توافق المقاول مع مدير البرنامج
             if (hasValidContractor(report.contractorName)) {
               const isCompatible = isContractorCompatibleWithManager(report.contractorName, project.programManager, activeProjects)
               if (!isCompatible) {
                 rejectedDueToContractorManagerMismatch = true
+                if (!suggestedProjectOnManagerMismatch) {
+                  suggestedProjectOnManagerMismatch = project
+                }
                 continue
               }
             }
@@ -357,7 +383,8 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
             candidates.push({
               project,
               confidence,
-              reason
+              reason,
+              featSector
             })
             break
           }
@@ -366,18 +393,21 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
-  // إذا وُجد تقاطع مكاني ولكن تم رفض المرشحين لعدم توافق المقاول مع مدير البرنامج: يُستبعد مباشرة
+  // إذا وُجد تقاطع مكاني ولكن تم تعليق المرشح لعدم توافق المقاول مع مدير البرنامج: مراجعة (لا استبعاد)
   if (candidates.length === 0 && rejectedDueToContractorManagerMismatch) {
     return {
       matched: false,
-      excluded: true,
-      excludedReason: 'المقاول بملف التعديات لا يتوافق مع مدير البرنامج/المشروع',
-      confidence: 0,
-      reason: 'contractor_program_manager_mismatch'
+      excluded: false,
+      needsReview: true,
+      shouldReview: true,
+      confidence: 0.5,
+      reason: 'contractor_program_manager_mismatch_review',
+      suggestedProject: suggestedProjectOnManagerMismatch,
+      actionCategory: 'تحت الإجراء'
     }
   }
 
-  // إذا وُجد تقاطع مكاني ولكن تم رفض المرشحين لأن المشروع صرف ذو نطاق محدد والبلاغ مياه: يُستبعد مباشرة
+  // إذا وُجد تقاطع مكاني وتم الاستبعاد لعدم تطابق نوع الخدمة:
   if (candidates.length === 0 && rejectedDueToSewerWaterMismatch) {
     return {
       matched: false,
@@ -388,11 +418,21 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
+  if (candidates.length === 0 && rejectedDueToWaterSewerMismatch) {
+    return {
+      matched: false,
+      excluded: true,
+      excludedReason: 'بلاغ شبكة صرف يقع ضمن نطاق مشروع مياه (عدم تطابق نوع الخدمة)',
+      confidence: 0,
+      reason: 'sewer_report_in_water_scope_mismatch'
+    }
+  }
+
   // قاعدة النمال: التأكد من البلاغات التي تقع على الخطوط الموجودة بالطبقة واستبعاد البقية للصيانة
-  if (hasValidContractor(report.contractorName) && normalizeArabic(report.contractorName).toLowerCase().includes('نمال')) {
+  if (hasValidContractor(report.contractorName) && contractorMatchesTokens(report.contractorName, ['نمال'])) {
     const nimalMatch = candidates.find(c => c.project && (
       String(c.project.id) === '61' || 
-      normalizeArabic(c.project.contractor || '').toLowerCase().includes('نمال')
+      contractorMatchesTokens(c.project.contractor, ['نمال'])
     ))
 
     if (nimalMatch) {
@@ -415,7 +455,7 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
-  // قاعدة صارمة: إذا كان للبلاغ إحداثيات جغرافية داخل الرياض ولا يقع في أي نطاق مكاني لمشاريع KMZ، يُستبعد فوراً
+  // قاعدة صارمة: إذا كان للبلاغ إحداثيات جغرافية صالحة داخل الرياض ولا يقع في أي نطاق مكاني لمشاريع KMZ، يُستبعد فوراً
   if (hasCoords && !isGovReport && !hasAnySpatialMatch) {
     return {
       matched: false,
@@ -426,7 +466,7 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
     }
   }
 
-  // 2. إذا لم يكن هناك إحداثيات أو كان البلاغ يتبع المحافظات خارج مدينة الرياض
+  // 2. إذا لم يكن هناك إحداثيات صالحة أو كان البلاغ يتبع المحافظات خارج مدينة الرياض
   if (!hasAnySpatialMatch) {
     for (const project of activeProjects) {
       let confidence = 0
@@ -452,10 +492,10 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
             }
           }
         } else if (!hasCoords) {
-          // للبلاغات التي تفتقر للإحداثيات تماماً: مطابقة المقاول والحي بدقة
+          // للبلاغات التي تفتقر للإحداثيات تماماً (أو إحداثياتها غير صالحة): مطابقة المقاول والحي
           const contractorMatched = matchContractor(report.contractorName, [project.contractor])
           if (contractorMatched && report.district && matchDistrict(report.district, project.scope)) {
-            confidence = 0.90
+            confidence = 0.75
             reason.push('contractor+district')
           }
         }
@@ -465,15 +505,43 @@ export function matchReportToProject(report, activeProjects, contractorsConfig, 
         candidates.push({
           project,
           confidence,
-          reason: reason.join(',')
+          reason: reason.join(','),
+          featSector: getProjectSector(project)
         })
       }
     }
   }
 
+  // إذا وقعت النقطة داخل نطاقين مختلفي النوع، اربطه بالنطاق المطابق لنوعه ولا تستبعده
+  if (candidates.length > 1 && (reportSector === 'مياه' || reportSector === 'صرف')) {
+    candidates.sort((a, b) => {
+      const aMatches = (a.featSector === reportSector || getProjectSector(a.project) === reportSector) ? 1 : 0
+      const bMatches = (b.featSector === reportSector || getProjectSector(b.project) === reportSector) ? 1 : 0
+      if (aMatches !== bMatches) return bMatches - aMatches
+      return b.confidence - a.confidence
+    })
+  } else {
+    candidates.sort((a, b) => b.confidence - a.confidence)
+  }
 
-  // فرز المرشحين بالأعلى ثقة
-  candidates.sort((a, b) => b.confidence - a.confidence)
+  // تعادل المرشحين: إذا كان أعلى مرشحين لمشروعين مختلفين والفرق بينهما أقل من 0.03
+  if (candidates.length >= 2) {
+    const c0 = candidates[0]
+    const c1 = candidates[1]
+    const diffProject = String(c0.project?.id) !== String(c1.project?.id)
+    const diffConf = Math.abs(c0.confidence - c1.confidence)
+    if (diffProject && diffConf < 0.03 && c0.confidence >= 0.70) {
+      return {
+        matched: true,
+        project: c0.project,
+        confidence: c0.confidence,
+        reason: 'tie_between_projects',
+        shouldReview: true,
+        needsReview: true,
+        alternatives: [c0, c1]
+      }
+    }
+  }
 
   // إذا كان المقاول الأعمال المدنية وتطابق الحي
   if (isCivilWorks) {
@@ -548,11 +616,6 @@ export function classifyReportSectorFromText(report) {
 
   if (hasSewer && !hasWater) return 'صرف'
   if (hasWater && !hasSewer) return 'مياه'
-  if (hasSewer && hasWater) {
-    const sewerIdx = cleanText.search(/صرف|صحي/)
-    const waterIdx = cleanText.search(/شبك[ةه]\s+مياه|خطوط\s+مياه|انبوب|أنبوب|ماسورة|عداد|تسريب|انكسار/)
-    return sewerIdx < waterIdx ? 'صرف' : 'مياه'
-  }
   return 'عام'
 }
 
@@ -622,31 +685,10 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       return false
     })
 
-    // استبعاد قطعي ومباشر لأي بلاغ يقع في حي مصنف للصيانة دون ربط بأي مشروع رأسمالي
-    if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
-      const ageInfo = computeAgeDays(report, processingDate)
-      const cls = classifyReportSectorFromText(report)
-      processed.push({
-        ...report,
-        matched: false,
-        excluded: true,
-        project: null,
-        programManager: null,
-        confidence: 0,
-        reason: 'maintenance_district',
-        excludedReason: `حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
-        actionCategory: 'تشغيل وصيانة',
-        isMaintenance: true,
-        sector: cls === 'عام' ? 'صرف' : cls,
-        ageDays: ageInfo.ageDays,
-        ...(ageInfo.missingDate ? { missingDate: true } : {})
-      })
-      continue
-    }
-
-    let result
+    // ترتيب الفحص الجديد:
+    // (1) تعديل يدوي استبعاد
     if (override?.excluded) {
-      result = {
+      const result = {
         ...report,
         matched: false,
         excluded: true,
@@ -664,15 +706,17 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       if (override.customSector) {
         result.sector = override.customSector
       } else {
-        const cls = classifyReportSectorFromText(report)
-        result.sector = cls === 'عام' ? 'صرف' : cls
+        result.sector = classifyReportSectorFromText(report)
       }
       const ageInfo = computeAgeDays(report, processingDate)
       result.ageDays = ageInfo.ageDays
       if (ageInfo.missingDate) result.missingDate = true
       processed.push(result)
       continue
-    } else if (override?.projectId || (override?.isLocked && (override?.project || override?.projectId))) {
+    }
+
+    // (2) تعديل يدوي تثبيت
+    if (override?.projectId || (override?.isLocked && (override?.project || override?.projectId))) {
       let proj = null
       if (override.projectId) {
         proj = projects.find(p => String(p.id).trim() === String(override.projectId).trim())
@@ -684,7 +728,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
         proj = projects.find(p => p.programManager === override.customProgramManager)
       }
 
-      result = {
+      const result = {
         ...report,
         matched: !!proj,
         excluded: false,
@@ -721,37 +765,99 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       }
       processed.push(result)
       continue
-    } else {
-      // Determine effective contractor before matching: if an override modified the contractor, use it directly!
-      const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')
-        ? String(override.customContractor).trim()
-        : report.contractorName
+    }
 
-      const reportToMatch = {
-        ...report,
-        contractorName: effectiveContractor
-      }
+    // (3) حي الصيانة
+    // إذا للبلاغ إحداثيات صالحة ووقع داخل مضلع أو خط مشروع نشط، لا تستبعده، بل اجعله بحاجة مراجعة
+    if (isDistrictInMaintenance(report.district, maintenanceDistricts)) {
+      const hasValidCoords = isValidSaudiCoords(report.longitude, report.latitude)
+      let activeProjectInside = null
 
-      const match = matchReportToProject(reportToMatch, activeProjects, contractorsConfig, maintenanceDistricts)
-      result = {
-        ...reportToMatch,
-        ...match,
-        isMaintenance
-      }
-
-      // If override has a custom contractor, but spatial matching couldn't find a project, attach to any valid project of that contractor
-      if (!result.excluded && override?.customContractor && (!result.matched || !result.project)) {
-        const cTarget = String(override.customContractor).trim()
-        const candidateProj = activeProjects.find(p => {
-          const cPName = (p.contractor || '').trim()
-          return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
-        })
-        if (candidateProj) {
-          result.project = { ...candidateProj }
-          result.matched = true
-          result.confidence = 0.9
-          result.reason = 'manual_contractor_override'
+      if (hasValidCoords) {
+        const pt = [Number(report.longitude), Number(report.latitude)]
+        for (const p of activeProjects) {
+          if (p._kmzFeatures?.length > 0) {
+            for (const feat of p._kmzFeatures) {
+              if (pointInBounds(pt, feat.geometry, feat._bbox)) {
+                activeProjectInside = p
+                break
+              }
+            }
+          }
+          if (activeProjectInside) break
         }
+      }
+
+      const ageInfo = computeAgeDays(report, processingDate)
+      const cls = classifyReportSectorFromText(report)
+
+      if (activeProjectInside) {
+        processed.push({
+          ...report,
+          matched: false,
+          excluded: false,
+          needsReview: true,
+          shouldReview: true,
+          project: null,
+          suggestedProject: activeProjectInside,
+          programManager: null,
+          confidence: 0.5,
+          reason: 'maintenance_district_inside_active_project',
+          actionCategory: 'تحت الإجراء',
+          isMaintenance: true,
+          sector: cls,
+          ageDays: ageInfo.ageDays,
+          ...(ageInfo.missingDate ? { missingDate: true } : {})
+        })
+      } else {
+        processed.push({
+          ...report,
+          matched: false,
+          excluded: true,
+          project: null,
+          programManager: null,
+          confidence: 0,
+          reason: 'maintenance_district',
+          excludedReason: `حي ${report.district || ''} تابع للتشغيل والصيانة (مستبعد مباشرة من المشاريع)`,
+          actionCategory: 'تشغيل وصيانة',
+          isMaintenance: true,
+          sector: cls,
+          ageDays: ageInfo.ageDays,
+          ...(ageInfo.missingDate ? { missingDate: true } : {})
+        })
+      }
+      continue
+    }
+
+    // (4) باقي المحرك
+    const effectiveContractor = (override?.customContractor !== undefined && override.customContractor !== null && String(override.customContractor).trim() !== '')
+      ? String(override.customContractor).trim()
+      : report.contractorName
+
+    const reportToMatch = {
+      ...report,
+      contractorName: effectiveContractor
+    }
+
+    const match = matchReportToProject(reportToMatch, activeProjects, contractorsConfig, maintenanceDistricts)
+    const result = {
+      ...reportToMatch,
+      ...match,
+      isMaintenance
+    }
+
+    // إذا وُجد تعديل مقاول يدوي ولم يُربط بمشروع، حاول ربطه بأي مشروع تابع للمقاول
+    if (!result.excluded && override?.customContractor && (!result.matched || !result.project)) {
+      const cTarget = String(override.customContractor).trim()
+      const candidateProj = activeProjects.find(p => {
+        const cPName = (p.contractor || '').trim()
+        return cPName && (cPName === cTarget || cPName.includes(cTarget) || cTarget.includes(cPName))
+      })
+      if (candidateProj) {
+        result.project = { ...candidateProj }
+        result.matched = true
+        result.confidence = 0.9
+        result.reason = 'manual_contractor_override'
       }
     }
 
@@ -775,6 +881,14 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.customContractor = override.customContractor
       result.isLocked = true
       result.lockedContractor = true
+    }
+
+    // فحص البلاغ ذي التصنيف العام المرتبط بمشروع
+    if (result.matched && result.project) {
+      const textSector = classifyReportSectorFromText(report)
+      if (textSector === 'عام') {
+        result.shouldReview = true
+      }
     }
 
     // If report was excluded, ensure project and programManager are strictly null
@@ -801,8 +915,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
     } else if (result.project) {
       result.sector = getProjectSector(result.project)
     } else {
-      const cls = classifyReportSectorFromText(report)
-      result.sector = cls === 'عام' ? 'صرف' : cls
+      result.sector = classifyReportSectorFromText(report)
     }
 
     if (report.status === 'تمت المعالجة') {
