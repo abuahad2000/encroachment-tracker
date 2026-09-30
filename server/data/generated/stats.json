@@ -1,17 +1,17 @@
 {
   "totalReports": 5300,
-  "totalActive": 22,
-  "pendingCount": 22,
+  "totalActive": 18,
+  "pendingCount": 18,
   "inProgressCount": 36,
-  "processedCount": 122,
-  "assignedCount": 180,
-  "excludedCount": 4972,
-  "matchedReports": 180,
-  "underProcessingCount": 22,
-  "archivedCount": 122,
-  "avgDelay": 113,
+  "processedCount": 121,
+  "assignedCount": 175,
+  "excludedCount": 5055,
+  "matchedReports": 175,
+  "underProcessingCount": 18,
+  "archivedCount": 121,
+  "avgDelay": 93,
   "medianDelay": 98,
-  "maxDelay": 406,
+  "maxDelay": 314,
   "statusDistribution": {
     "تمت المعالجة": 1654,
     "معاد من المقاول": 259,
@@ -30,7 +30,7 @@
     },
     {
       "name": "سعيد الحارث",
-      "count": 8
+      "count": 4
     },
     {
       "name": "عسكر لسلوم",
@@ -45,8 +45,10 @@
       "count": 1
     }
   ],
-  "lastUpdate": "2026-09-30T17:09:28.104Z",
+  "lastUpdate": "2026-09-30T17:59:33.765Z",
   "totalProjects": 122,
   "activeProjects": 73,
-  "deliveredProjects": 41
+  "deliveredProjects": 41,
+  "historicalCount": 0,
+  "weeklyIncomingCount": 5300
 }

@@ -124,10 +124,51 @@ export async function buildData(customReportsFile = null) {
         contractorsConfig = { customContractors: [], aliases: {} }
       }
     }
+    // ✅ منطق الدمج الأسبوعي الآمن (Safe Weekly Merge Logic)
+    // الحفاظ على الأرشيف التاريخي للبلاغات التي تختفي من الملف الأسبوعي الجديد
+    const incomingReportIds = new Set(reports.map(r => normalizeId(r.id)).filter(Boolean))
+    let previousReports = []
+    const generatedReportsPath = path.join(DATA_DIR, 'generated/reports.json')
+    const directReportsPath = path.join(DATA_DIR, 'reports.json')
+    const prevSource = fs.existsSync(generatedReportsPath) ? generatedReportsPath : (fs.existsSync(directReportsPath) ? directReportsPath : null)
+
+    if (prevSource && (customReportsFile || fs.existsSync(targetFile))) {
+      try {
+        const rawPrev = JSON.parse(fs.readFileSync(prevSource, 'utf-8'))
+        if (Array.isArray(rawPrev)) {
+          previousReports = rawPrev
+        }
+      } catch (e) {
+        console.warn('تحذير: تعذر قراءة البلاغات السابقة للأرشيف:', e.message)
+      }
+    }
+
+    const disappearedHistoricalReports = []
+    if (previousReports.length > 0 && reports.length > 0 && customReportsFile) {
+      for (const prevR of previousReports) {
+        const pId = normalizeId(prevR.id)
+        if (pId && !incomingReportIds.has(pId)) {
+          disappearedHistoricalReports.push({
+            ...prevR,
+            isHistorical: true,
+            disappearedFromWeekly: true,
+            archived: true,
+            historicalNote: 'بلاغ تاريخي محفوظ: اختفى من التقرير الأسبوعي الأحدث'
+          })
+        }
+      }
+      if (disappearedHistoricalReports.length > 0) {
+        console.log(`🛡️ [الدمج الأسبوعي الآمن]: تم الحفاظ على ${disappearedHistoricalReports.length} بلاغ تاريخي اختفى من الملف الأسبوعي الجديد`)
+      }
+    }
+
+    const allReportsToProcess = [...reports, ...disappearedHistoricalReports]
 
     console.log('⚙️  جاري معالجة ومطابقة البلاغات...')
-    const processedReports = processReports(reports, projects, geoJsonData, overrides, contractorsConfig)
+    const processedReports = processReports(allReportsToProcess, projects, geoJsonData, overrides, contractorsConfig)
     const stats = calculateStats(processedReports, projects)
+    stats.historicalCount = disappearedHistoricalReports.length
+    stats.weeklyIncomingCount = reports.length
     const managers = createManagersData(projects, processedReports)
 
     const outputDir = path.join(DATA_DIR, 'generated')
@@ -210,7 +251,7 @@ export async function buildData(customReportsFile = null) {
     if (reports.rejectedRows) rejectedRows = reports.rejectedRows
     if (reports.nullDatesCount !== undefined) nullDatesCount = reports.nullDatesCount
 
-    return { success: true, stats, rejectedRows, nullDatesCount, reports }
+    return { success: true, stats, rejectedRows, nullDatesCount, reports: processedReports, totalCount: processedReports.length }
   } catch (err) {
     console.error('❌ خطأ في المعالجة:', err.message)
     throw err

@@ -2,6 +2,7 @@ import { normalizeArabic, similarity } from './normalize.js'
 import * as turf from '@turf/turf'
 import { matchGovernorateFeatureToProject } from './governorateMatcher.js'
 import { isDistrictInMaintenance, loadMaintenanceDistricts } from './districtClassification.js'
+import { checkMaintenanceContractor, checkCapitalContractor } from './contractorsRegistry.js'
 
 const SIMILARITY_THRESHOLD = 0.82
 const MAINTENANCE_KEYWORDS = ['طارئ', 'انكسار', 'صيانة', 'دورية', 'إصلاح']
@@ -40,6 +41,17 @@ export function hasValidContractor(contractorName) {
 export function isContractorCompatibleWithManager(reportContractor, programManager, allProjects) {
   if (!hasValidContractor(reportContractor)) return true
   if (!programManager || programManager === 'غير محدد' || programManager === '-') return false
+
+  // فحص سجل المقاولين الرأسماليين المعتمد أولاً
+  const capInfo = checkCapitalContractor(reportContractor)
+  if (capInfo && capInfo.programManagers?.length > 0) {
+    const isDirectMatch = capInfo.programManagers.some(pm => {
+      const pmNorm = normalizeArabic(pm).toLowerCase()
+      const progNorm = normalizeArabic(programManager).toLowerCase()
+      return pmNorm.includes(progNorm) || progNorm.includes(pmNorm)
+    })
+    if (isDirectMatch) return true
+  }
 
   const managerProjects = allProjects.filter(p => p.programManager === programManager)
   const managerContractors = managerProjects.map(p => p.contractor).filter(Boolean)
@@ -278,6 +290,22 @@ export function getFeatureSector(feat, project) {
 }
 
 export function matchReportToProject(report, activeProjects, contractorsConfig, maintenanceDistricts = null) {
+  // 0. فحص تصنيف مقاولي التشغيل والصيانة من السجل المرجعي المحمي
+  const maintCheck = checkMaintenanceContractor(report.contractorName, report)
+  if (maintCheck.isMaintenance) {
+    return {
+      matched: false,
+      excluded: true,
+      project: null,
+      programManager: null,
+      confidence: 0,
+      reason: 'maintenance_contractor',
+      excludedReason: maintCheck.excludedReason || 'المقاول تابع لإدارة التشغيل والصيانة (غير تابع للمشاريع الرأسمالية)',
+      actionCategory: 'تشغيل وصيانة',
+      isMaintenance: true
+    }
+  }
+
   const isCivilWorks = isCivilWorksContractor(report.contractorName)
 
   // 1. فحص مقاولي عقود المتفرقات الشاملة بالرياض (صرف صحي: الاومير، العيسى، النمال)
@@ -679,6 +707,20 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       return !!(oIdNorm && rIdNorm && oIdNorm === rIdNorm)
     })
 
+    // (0) البلاغات التاريخية المحفوظة (الدمج الأسبوعي الآمن)
+    if (report.isHistorical && !override) {
+      const ageInfo = computeAgeDays(report, processingDate)
+      processed.push({
+        ...report,
+        isHistorical: true,
+        disappearedFromWeekly: true,
+        archived: true,
+        ageDays: ageInfo.ageDays,
+        actionCategory: report.actionCategory || (report.matched ? 'تمت المعالجة' : 'مستبعد')
+      })
+      continue
+    }
+
     // ترتيب الفحص الجديد:
     // (1) تعديل يدوي استبعاد
     if (override?.excluded) {
@@ -890,7 +932,7 @@ export function processReports(reports, projects, geoJsonData, overrides, contra
       result.project = null
       result.programManager = null
       result.matched = false
-      if (result.excludedReason?.includes('تشغيل وصيانة') || result.excludedReason?.includes('الصيانة')) {
+      if (result.excludedReason?.includes('تشغيل وصيانة') || result.excludedReason?.includes('الصيانة') || result.reason === 'maintenance_contractor') {
         result.actionCategory = 'تشغيل وصيانة'
       } else {
         result.actionCategory = 'مستبعد'
